@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="images/NeuralNexus_logo.svg" alt="Neural Nexus Logo" width="300" />
+</div>
+
 # 🧠 Neural Nexus: Universal AI Memory Protocol (NNMP)
 
 **Neural Nexus** is a framework-agnostic, long-term memory system designed to give AI agents a persistent "brain" that persists across different LLMs, platforms, and sessions. 
