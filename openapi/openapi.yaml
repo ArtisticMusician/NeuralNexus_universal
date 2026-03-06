@@ -1,0 +1,54 @@
+openapi: 3.0.0
+info:
+  title: Neural Nexus Universal Memory API
+  version: 1.0.0
+  description: A centralized, platform-agnostic long-term memory system.
+
+paths:
+  /recall:
+    post:
+      summary: Query long-term memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+                user_id: { type: string }
+                limit: { type: integer, default: 5 }
+                max_tokens: { type: integer }
+      responses:
+        '200':
+          description: List of relevant memories
+
+  /store:
+    post:
+      summary: Save a new memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string }
+                category: { type: string, enum: [preference, fact, entity, decision, other] }
+                user_id: { type: string }
+      responses:
+        '201':
+          description: Memory successfully stored
+
+  /reinforce:
+    post:
+      summary: Strengthen a specific memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                memory_id: { type: string }
+                user_id: { type: string }

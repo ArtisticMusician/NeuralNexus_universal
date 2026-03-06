@@ -1,0 +1,63 @@
+{
+  "name": "@openclaw/neural_nexus",
+  "version": "2026.2.17",
+  "description": "Qdrant-backed long-term memory plugin for OpenClaw",
+  "type": "module",
+  "bin": {
+    "nexus": "./dist/src/cli.js"
+  },
+  "scripts": {
+    "start": "node dist/src/server.js",
+    "dev": "tsc --watch",
+    "server:dev": "node --watch --env-file=.env dist/src/server.js",
+    "mcp:start": "node dist/src/mcp.js",
+    "proxy:start": "node dist/src/openai-proxy.js",
+    "telegram:start": "node dist/src/telegram-bot.js",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/static": "^9.0.0",
+    "@fastify/swagger": "^9.7.0",
+    "@fastify/swagger-ui": "^5.2.5",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@qdrant/js-client-rest": "^1.16.2",
+    "@sinclair/typebox": "0.34.48",
+    "@xenova/transformers": "^2.17.2",
+    "async-lock": "^1.4.1",
+    "axios": "^1.13.6",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "dotenv": "^17.3.1",
+    "fastify": "^5.8.1",
+    "sharp": "^0.34.5",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
+    "telegraf": "^4.16.3",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/async-lock": "^1.4.2",
+    "@types/chalk": "^0.4.31",
+    "@types/commander": "^2.12.0",
+    "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "openclaw": "*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "overrides": {
+    "fast-xml-parser": "5.3.6",
+    "tar": "7.5.8"
+  }
+}

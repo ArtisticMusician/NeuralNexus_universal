@@ -1,0 +1,178 @@
+import { EmbeddingService } from "./EmbeddingService.js";
+import { StorageService } from "./StorageService.js";
+import { DecayEngine } from "./DecayEngine.js";
+import { ReplacementAuditService } from "./ReplacementAuditService.js";
+import { type MemoryConfig } from "./config.js";
+import { 
+  type MemoryEntry, 
+  type RecallRequest, 
+  type RecallResponse, 
+  type StoreRequest, 
+  type ReinforceRequest 
+} from "./types.js";
+import { v4 as uuidv4 } from "uuid";
+import AsyncLock from "async-lock";
+
+/**
+ * NeuralNexusCore: The central Orchestration Layer.
+ * It coordinates between Embedding, Storage, Decay, and Audit services.
+ * It enforces Atomic Locking and Semantic Deduplication.
+ */
+export class NeuralNexusCore {
+  private embedding: EmbeddingService;
+  private storage: StorageService;
+  private decay: DecayEngine;
+  private audit: ReplacementAuditService;
+  private lock: AsyncLock;
+
+  constructor(private config: MemoryConfig) {
+    this.embedding = new EmbeddingService(config.embedding.model, config.embedding.device);
+    this.storage = new StorageService(config.qdrant.url, config.qdrant.collection, config.qdrant.apiKey);
+    this.decay = new DecayEngine();
+    this.audit = new ReplacementAuditService(config.replacementLog.enabled, config.replacementLog.sqlitePath);
+    this.lock = new AsyncLock();
+  }
+
+  /**
+   * Initialize all sub-services.
+   */
+  async initialize() {
+    await this.embedding.initialize();
+    const dim = this.embedding.getDim();
+    if (dim === null) {
+      throw new Error("NeuralNexusCore: Could not determine embedding dimension.");
+    }
+    await this.storage.initialize(dim);
+    await this.audit.initialize();
+  }
+
+  /**
+   * Recall relevant memories using Hybrid Search (Vector + Keyword) and Decay scoring.
+   */
+  async recall(request: RecallRequest): Promise<RecallResponse> {
+    const vector = await this.embedding.createVector(request.query);
+    const results = await this.storage.find(vector, request.limit ?? 10, request.userId, request.query);
+
+    const memories: MemoryEntry[] = results.map((res: any) => {
+      const payload = res.payload;
+      const score = res.score;
+      const decayedScore = this.decay.calculateScore(
+        score,
+        payload.last_accessed,
+        0.0000001, 
+        payload.strength ?? 1
+      );
+
+      return {
+        id: res.id.toString(),
+        text: payload.text,
+        category: payload.category,
+        vector: res.vector ?? [],
+        metadata: {
+          ...payload,
+          decayed_score: decayedScore
+        }
+      };
+    });
+
+    memories.sort((a, b) => (b.metadata.decayed_score as number) - (a.metadata.decayed_score as number));
+
+    if (request.maxTokens) {
+      return this.applyTokenBudget(memories, request.maxTokens);
+    }
+
+    return { memories };
+  }
+
+  /**
+   * Store or Update a memory with semantic deduplication and atomic locking.
+   */
+  async store(request: StoreRequest): Promise<void> {
+    const vector = await this.embedding.createVector(request.text);
+    const userId = request.userId || "anonymous";
+
+    await this.lock.acquire(`store:${userId}`, async () => {
+      const existing = await this.storage.find(vector, 1, request.userId);
+      const similarityThreshold = 0.95;
+
+      if (existing.length > 0 && existing[0].score >= similarityThreshold) {
+        return this.handleMerge(existing[0], request);
+      }
+
+      const id = uuidv4();
+      const payload = {
+        text: request.text,
+        category: request.category || this.detectCategory(request.text),
+        last_accessed: Date.now(),
+        created_at: Date.now(),
+        strength: 1,
+        userId: request.userId,
+        ...request.metadata
+      };
+
+      await this.storage.store(id, vector, payload);
+    });
+  }
+
+  /**
+   * Reinforce a memory's strength atomically.
+   */
+  async reinforce(request: ReinforceRequest): Promise<void> {
+    await this.lock.acquire(`reinforce:${request.memoryId}`, async () => {
+      const point = await this.storage.getPoint(request.memoryId);
+      if (!point) return;
+
+      const currentStrength = (point.payload as any).strength || 1;
+      await this.storage.updatePayload(request.memoryId, {
+        strength: currentStrength + (request.strengthAdjustment || 0.05),
+        last_accessed: Date.now()
+      });
+    });
+  }
+
+  async getAuditLogs(limit?: number) {
+    return await this.audit.getLogs(limit);
+  }
+
+  // --- Internal Helper Logic ---
+
+  private async handleMerge(bestMatch: any, request: StoreRequest) {
+    const id = bestMatch.id.toString();
+    await this.storage.updatePayload(id, {
+      text: request.text,
+      category: request.category || bestMatch.payload.category,
+      last_accessed: Date.now(),
+      strength: (bestMatch.payload.strength || 1) + 0.1
+    });
+
+    await this.audit.logReplacement({
+      memoryId: id,
+      category: request.category || bestMatch.payload.category,
+      oldText: bestMatch.payload.text,
+      newText: request.text,
+      similarityScore: bestMatch.score,
+      replacedAt: Date.now()
+    });
+  }
+
+  private async applyTokenBudget(memories: MemoryEntry[], maxTokens: number): Promise<RecallResponse> {
+    const budgeted: MemoryEntry[] = [];
+    let currentCount = 0;
+    for (const m of memories) {
+      const tokens = await this.embedding.countTokens(m.text);
+      if (currentCount + tokens <= maxTokens) {
+        budgeted.push(m);
+        currentCount += tokens;
+      } else break;
+    }
+    return { memories: budgeted };
+  }
+
+  private detectCategory(text: string): string {
+    const lower = text.toLowerCase();
+    if (lower.includes("prefer") || lower.includes("like")) return "preference";
+    if (lower.includes("decided") || lower.includes("chose")) return "decision";
+    if (lower.includes("is a") || lower.includes("called")) return "entity";
+    return "fact";
+  }
+}

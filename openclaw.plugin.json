@@ -1,0 +1,132 @@
+{
+  "id": "neural_nexus",
+  "name": "Neural Nexus",
+  "description": "Qdrant-backed long-term memory plugin",
+  "version": "2026.2.17",
+  "kind": "memory",
+  "uiHints": {
+    "embedding.model": {
+      "label": "Embedding Model",
+      "placeholder": "Xenova/bge-small-en-v1.5",
+      "help": "Hugging Face model name with ONNX support (for example Xenova/bge-small-en-v1.5)."
+    },
+    "embedding.device": {
+      "label": "Device",
+      "placeholder": "cuda",
+      "help": "Device for embedding model (cuda or cpu)."
+    },
+    "qdrant.url": {
+      "label": "Qdrant URL",
+      "placeholder": "http://localhost:6333",
+      "help": "Qdrant server URL."
+    },
+    "qdrant.collection": {
+      "label": "Collection Name",
+      "placeholder": "openclaw_memories",
+      "help": "Qdrant collection name for memories."
+    },
+    "qdrant.apiKey": {
+      "label": "API Key (optional)",
+      "sensitive": true,
+      "help": "Qdrant cloud API key (leave empty for local server)."
+    },
+    "autoCapture": {
+      "label": "Auto-Capture",
+      "help": "Automatically capture important information from conversations."
+    },
+    "autoRecall": {
+      "label": "Auto-Recall",
+      "help": "Enable memory recall tooling."
+    },
+    "consolidation": {
+      "label": "Conversation Consolidation",
+      "help": "Consolidate long conversations into a compact memory candidate."
+    },
+    "consolidationThreshold": {
+      "label": "Consolidation Threshold",
+      "help": "Number of user messages before consolidation is triggered."
+    },
+    "replacementLog.enabled": {
+      "label": "Replacement Audit Log",
+      "help": "Record each memory replacement in a SQLite table."
+    },
+    "replacementLog.sqlitePath": {
+      "label": "Replacement Log SQLite Path",
+      "placeholder": "./data/neural_nexus_replacements.sqlite",
+      "help": "Path to the SQLite database file that stores replacement history."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "embedding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "type": "string",
+            "default": "Xenova/bge-small-en-v1.5"
+          },
+          "device": {
+            "type": "string",
+            "enum": ["cuda", "cpu"],
+            "default": "cuda"
+          }
+        },
+        "required": []
+      },
+      "qdrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "default": "http://localhost:6333"
+          },
+          "collection": {
+            "type": "string",
+            "default": "openclaw_memories"
+          },
+          "apiKey": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "autoCapture": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoRecall": {
+        "type": "boolean",
+        "default": true
+      },
+      "consolidation": {
+        "type": "boolean",
+        "default": true
+      },
+      "consolidationThreshold": {
+        "type": "number",
+        "default": 4
+      },
+      "replacementLog": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "sqlitePath": {
+            "type": "string",
+            "default": "./data/neural_nexus_replacements.sqlite"
+          }
+        },
+        "required": []
+      }
+    },
+    "required": []
+  }
+}
+

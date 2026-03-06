@@ -1,0 +1,117 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Search, Plus, BrainCircuit, RefreshCw } from 'lucide-react';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+function App() {
+  const [query, setQuery] = useState('');
+  const [memories, setMemories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isStoreOpen, setIsStoreOpen] = useState(false);
+  const [newText, setNewText] = useState('');
+  const [newCategory, setNewCategory] = useState('fact');
+
+  const handleRecall = async () => {
+    if (!query) return;
+    setLoading(true);
+    try {
+      const res = await axios.post(`${API_URL}/recall`, { query, limit: 12 });
+      setMemories(res.data.memories);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_URL}/store`, { text: newText, category: newCategory });
+      setNewText('');
+      setIsStoreOpen(false);
+      // Auto-search for what we just added
+      setQuery(newText);
+      handleRecall();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="dashboard-container">
+      <header>
+        <div className="title">
+          <BrainCircuit size={32} />
+          <span>Neural Nexus Universal</span>
+        </div>
+        <button onClick={() => setIsStoreOpen(!isStoreOpen)}>
+          <Plus size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+          Store New Memory
+        </button>
+      </header>
+
+      {isStoreOpen && (
+        <form onSubmit={handleStore} style={{ marginBottom: '2rem', padding: '1.5rem', background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155' }}>
+          <div style={{ marginBottom: '1rem' }}>
+            <label>Category</label>
+            <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)}>
+              <option value="fact">Fact</option>
+              <option value="preference">Preference</option>
+              <option value="entity">Entity</option>
+              <option value="decision">Decision</option>
+            </select>
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <label>Memory Text</label>
+            <textarea 
+              rows={4} 
+              value={newText} 
+              onChange={(e) => setNewText(e.target.value)}
+              placeholder="What should I remember?"
+            />
+          </div>
+          <button type="submit">Save to Neural Nexus</button>
+        </form>
+      )}
+
+      <div className="search-section">
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search size={20} style={{ position: 'absolute', left: '12px', top: '14px', color: '#94a3b8' }} />
+          <input 
+            type="text" 
+            placeholder="Search your memories..." 
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRecall()}
+            style={{ paddingLeft: '40px' }}
+          />
+        </div>
+        <button onClick={handleRecall}>
+          {loading ? <RefreshCw className="animate-spin" size={20} /> : 'Recall'}
+        </button>
+      </div>
+
+      <div className="memories-grid">
+        {memories.map((m) => (
+          <div key={m.id} className="memory-card">
+            <span className="badge">{m.category}</span>
+            <div className="memory-text">{m.text}</div>
+            <div className="memory-footer">
+              <span>Score: {m.metadata.decayed_score?.toFixed(4)}</span>
+              <span>{new Date(m.metadata.created_at).toLocaleDateString()}</span>
+            </div>
+          </div>
+        ))}
+        {!loading && memories.length === 0 && query && (
+          <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+            No relevant memories found for this query.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default App;
