@@ -3,6 +3,12 @@ import axios from 'axios';
 import { Search, Plus, BrainCircuit, RefreshCw } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_KEY = import.meta.env.VITE_NEXUS_API_KEY;
+
+const api = axios.create({
+  baseURL: API_URL,
+  headers: API_KEY ? { 'X-API-Key': API_KEY } : {}
+});
 
 function App() {
   const [query, setQuery] = useState('');
@@ -16,7 +22,7 @@ function App() {
     if (!query) return;
     setLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/recall`, { query, limit: 12 });
+      const res = await api.post(`/recall`, { query, limit: 12 });
       setMemories(res.data.memories);
     } catch (err) {
       console.error(err);
@@ -28,10 +34,9 @@ function App() {
   const handleStore = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_URL}/store`, { text: newText, category: newCategory });
+      await api.post(`/store`, { text: newText, category: newCategory });
       setNewText('');
       setIsStoreOpen(false);
-      // Auto-search for what we just added
       setQuery(newText);
       handleRecall();
     } catch (err) {

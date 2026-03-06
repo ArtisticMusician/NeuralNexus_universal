@@ -1,8 +1,19 @@
 import { test, expect, vi } from "vitest";
 import axios from "axios";
-import { server } from "../src/mcp.js";
 
-vi.mock("axios");
+vi.mock("axios", () => {
+  return {
+    default: {
+      create: vi.fn().mockReturnValue({
+        post: vi.fn(),
+        get: vi.fn(),
+      }),
+    },
+  };
+});
+
+// Import server AFTER mocking axios
+import { server, api } from "../src/mcp.js";
 
 test("MCP list tools", async () => {
   // @ts-ignore
@@ -15,9 +26,9 @@ test("MCP list tools", async () => {
 });
 
 test("MCP call recall tool", async () => {
-  vi.mocked(axios.post).mockResolvedValue({
+  vi.mocked(api.post).mockResolvedValue({
     data: { memories: [{ text: "test memory", category: "fact" }] }
-  });
+  } as any);
 
   // @ts-ignore
   const handler = server._requestHandlers.get("tools/call");
@@ -33,7 +44,7 @@ test("MCP call recall tool", async () => {
 });
 
 test("MCP call store tool", async () => {
-  vi.mocked(axios.post).mockResolvedValue({ status: 201 });
+  vi.mocked(api.post).mockResolvedValue({ status: 201 } as any);
 
   // @ts-ignore
   const handler = server._requestHandlers.get("tools/call");

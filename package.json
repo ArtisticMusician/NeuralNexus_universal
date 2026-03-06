@@ -13,6 +13,7 @@
     "mcp:start": "node dist/src/mcp.js",
     "proxy:start": "node dist/src/openai-proxy.js",
     "telegram:start": "node dist/src/telegram-bot.js",
+    "sdk:build": "cd packages/nexus-js && npm run build",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",

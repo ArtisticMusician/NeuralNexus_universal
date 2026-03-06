@@ -4,6 +4,7 @@ import { DecayEngine } from "./DecayEngine.js";
 import { ReplacementAuditService } from "./ReplacementAuditService.js";
 import { type MemoryConfig } from "./config.js";
 import { 
+  type MemoryCategory, 
   type MemoryEntry, 
   type RecallRequest, 
   type RecallResponse, 
@@ -134,7 +135,146 @@ export class NeuralNexusCore {
     return await this.audit.getLogs(limit);
   }
 
-  // --- Internal Helper Logic ---
+  async exportMemories(userId?: string) {
+    const points = await this.storage.scrollAll(userId);
+    return points.map((p) => ({
+      id: p.id,
+      vector: p.vector,
+      payload: p.payload,
+    }));
+  }
+
+  async importMemories(memories: any[]) {
+    if (!Array.isArray(memories)) throw new Error("Invalid import format");
+    
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < memories.length; i += CHUNK_SIZE) {
+      const chunk = memories.slice(i, i + CHUNK_SIZE);
+      const points = chunk.map((m) => ({
+        id: m.id || uuidv4(),
+        vector: m.vector || [], 
+        payload: m.payload || {},
+      }));
+      await this.storage.storeBatch(points);
+    }
+  }
+
+  // --- Public Helper Logic (Used by adapters and for testing) ---
+
+  public async applyTokenBudget(memories: MemoryEntry[], maxTokens: number): Promise<RecallResponse> {
+    const budgeted: MemoryEntry[] = [];
+    let currentCount = 0;
+    for (const m of memories) {
+      const tokens = await this.embedding.countTokens(m.text);
+      if (currentCount + tokens <= maxTokens) {
+        budgeted.push(m);
+        currentCount += tokens;
+      } else break;
+    }
+    return { memories: budgeted };
+  }
+
+  public detectCategory(text: string): MemoryCategory {
+    const lower = text.toLowerCase();
+    if (lower.includes("prefer") || lower.includes("like") || lower.includes("dislike")) return "preference";
+    if (lower.includes("decided") || lower.includes("chose") || lower.includes("instead of")) return "decision";
+    if (lower.includes("is a") || lower.includes("called")) return "entity";
+    return "fact";
+  }
+
+  public static normalizeWhitespace(value: string): string {
+    return value.replace(/\s+/g, " ").trim();
+  }
+
+  public extractText(content: unknown): string | null {
+    if (typeof content === "string") {
+      const normalized = NeuralNexusCore.normalizeWhitespace(content);
+      return normalized.length > 0 ? normalized : null;
+    }
+
+    if (Array.isArray(content)) {
+      const parts: string[] = [];
+      for (const part of content) {
+        if (!part || typeof part !== "object") {
+          continue;
+        }
+        const maybeText = (part as { text?: unknown }).text;
+        if (typeof maybeText === "string" && maybeText.trim()) {
+          parts.push(maybeText.trim());
+        }
+      }
+      if (parts.length > 0) {
+        return NeuralNexusCore.normalizeWhitespace(parts.join(" "));
+      }
+    }
+
+    return null;
+  }
+
+  public userMessages(messages: unknown[]): string[] {
+    const texts: string[] = [];
+
+    for (const msg of messages) {
+      if (!msg || typeof msg !== "object") {
+        continue;
+      }
+
+      const typed = msg as any;
+      if (typed.role !== "user") {
+        continue;
+      }
+
+      const text = this.extractText(typed.content);
+      if (text) {
+        texts.push(text);
+      }
+    }
+
+    return texts;
+  }
+
+  public extractCandidate(messages: unknown[]): string | null {
+    const userTexts = this.userMessages(messages);
+    const last = userTexts[userTexts.length - 1];
+    if (!last || last.length < 25) {
+      return null;
+    }
+    return last.slice(0, 1200);
+  }
+
+  public consolidate(messages: unknown[], threshold: number): string | null {
+    const userTexts = this.userMessages(messages);
+    if (userTexts.length === 0) {
+      return null;
+    }
+
+    if (userTexts.length < threshold) {
+      return this.extractCandidate(messages);
+    }
+
+    const deduped: string[] = [];
+    const seen = new Set<string>();
+
+    for (const text of userTexts.slice(-12)) {
+      if (text.length < 10) {
+        continue;
+      }
+      const key = text.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      deduped.push(text);
+    }
+
+    if (deduped.length === 0) {
+      return null;
+    }
+
+    return NeuralNexusCore.normalizeWhitespace(deduped.join(" ")).slice(0, 1200);
+  }
+
+  // --- Internal Logic ---
 
   private async handleMerge(bestMatch: any, request: StoreRequest) {
     const id = bestMatch.id.toString();
@@ -153,26 +293,5 @@ export class NeuralNexusCore {
       similarityScore: bestMatch.score,
       replacedAt: Date.now()
     });
-  }
-
-  private async applyTokenBudget(memories: MemoryEntry[], maxTokens: number): Promise<RecallResponse> {
-    const budgeted: MemoryEntry[] = [];
-    let currentCount = 0;
-    for (const m of memories) {
-      const tokens = await this.embedding.countTokens(m.text);
-      if (currentCount + tokens <= maxTokens) {
-        budgeted.push(m);
-        currentCount += tokens;
-      } else break;
-    }
-    return { memories: budgeted };
-  }
-
-  private detectCategory(text: string): string {
-    const lower = text.toLowerCase();
-    if (lower.includes("prefer") || lower.includes("like")) return "preference";
-    if (lower.includes("decided") || lower.includes("chose")) return "decision";
-    if (lower.includes("is a") || lower.includes("called")) return "entity";
-    return "fact";
   }
 }

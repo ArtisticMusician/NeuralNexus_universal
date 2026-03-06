@@ -18,6 +18,7 @@ export type MemoryConfig = {
     enabled: boolean;
     sqlitePath: string;
   };
+  apiKey?: string;
 };
 
 export const MEMORY_CATEGORIES = ["preference", "fact", "decision", "entity", "other"] as const;
@@ -73,5 +74,6 @@ export function normalizeMemoryConfig(input: unknown): MemoryConfig {
       enabled: replacementLog.enabled !== false,
       sqlitePath: rawSqlitePath || DEFAULT_REPLACEMENT_LOG_PATH,
     },
+    apiKey: typeof cfg.apiKey === "string" ? resolveEnvVars(cfg.apiKey).trim() : undefined,
   };
 }

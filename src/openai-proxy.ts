@@ -6,20 +6,25 @@ import "dotenv/config";
 export const server = fastify({ logger: true });
 
 const NEXUS_API_URL = process.env.API_URL || "http://localhost:3000";
+const NEXUS_API_KEY = process.env.NEXUS_API_KEY;
 const LLM_TARGET_URL = process.env.LLM_TARGET_URL || "https://api.openai.com/v1";
 const LLM_API_KEY = process.env.LLM_API_KEY || "";
+
+const nexusApi = axios.create({
+  baseURL: NEXUS_API_URL,
+  headers: NEXUS_API_KEY ? { 'X-API-Key': NEXUS_API_KEY } : {}
+});
 
 server.post("/v1/chat/completions", async (request, reply) => {
   const body = request.body as any;
   const messages = body.messages || [];
   
-  // 1. Extract last user message for recall
   const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content;
   let contextStr = "";
 
   if (lastUserMessage && typeof lastUserMessage === "string") {
     try {
-      const recallRes = await axios.post(`${NEXUS_API_URL}/recall`, {
+      const recallRes = await nexusApi.post(`/recall`, {
         query: lastUserMessage,
         limit: 3
       });
@@ -33,7 +38,6 @@ server.post("/v1/chat/completions", async (request, reply) => {
     }
   }
 
-  // 2. Inject context into System Message
   let systemMsg = messages.find((m: any) => m.role === "system");
   if (!systemMsg) {
     systemMsg = { role: "system", content: "You are a helpful assistant with long-term memory." };
@@ -44,7 +48,6 @@ server.post("/v1/chat/completions", async (request, reply) => {
     systemMsg.content += contextStr;
   }
 
-  // 3. Forward to Target LLM
   try {
     const response = await axios.post(`${LLM_TARGET_URL}/chat/completions`, body, {
       headers: {
@@ -54,7 +57,6 @@ server.post("/v1/chat/completions", async (request, reply) => {
       responseType: body.stream ? 'stream' : 'json'
     });
 
-    // Handle non-streaming response for tool interception
     if (!body.stream) {
       const choice = response.data.choices?.[0];
       const toolCalls = choice?.message?.tool_calls;
@@ -63,7 +65,7 @@ server.post("/v1/chat/completions", async (request, reply) => {
         for (const call of toolCalls) {
           if (call.function?.name === "store_memory") {
             const args = JSON.parse(call.function.arguments);
-            await axios.post(`${NEXUS_API_URL}/store`, args);
+            await nexusApi.post(`/store`, args);
             server.log.info("Intercepted and executed store_memory tool call");
           }
         }
@@ -71,7 +73,6 @@ server.post("/v1/chat/completions", async (request, reply) => {
       return response.data;
     }
 
-    // Handle streaming
     reply.raw.writeHead(response.status, response.headers as any);
     response.data.pipe(reply.raw);
   } catch (err: any) {
@@ -80,7 +81,6 @@ server.post("/v1/chat/completions", async (request, reply) => {
   }
 });
 
-// Pass-through for other OpenAI endpoints
 server.all("/v1/*", async (request, reply) => {
     const path = (request.params as any)["*"];
     try {

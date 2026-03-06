@@ -77,6 +77,29 @@ export class StorageService {
     return merged.slice(0, limit);
   }
 
+  async scrollAll(userId?: string): Promise<any[]> {
+    const filter = userId ? { must: [{ key: "userId", match: { value: userId } }] } : undefined;
+    const allPoints: any[] = [];
+    let nextOffset: string | number | Record<string, unknown> | null | undefined = undefined;
+
+    do {
+      const response: any = await this.client.scroll(this.collection, {
+        filter,
+        limit: 100,
+        with_payload: true,
+        offset: nextOffset ?? undefined,
+      });
+      allPoints.push(...response.points);
+      nextOffset = response.next_page_offset;
+    } while (nextOffset);
+
+    return allPoints;
+  }
+
+  async storeBatch(points: { id: string, vector: number[], payload: any }[]) {
+    await this.client.upsert(this.collection, { points });
+  }
+
   async updatePayload(id: string, partialPayload: Record<string, unknown>) {
     await this.client.setPayload(this.collection, {
       payload: partialPayload,

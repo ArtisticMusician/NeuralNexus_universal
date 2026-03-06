@@ -4,6 +4,12 @@ import 'dotenv/config';
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN || '');
 const NEXUS_API_URL = process.env.API_URL || 'http://localhost:3000';
+const NEXUS_API_KEY = process.env.NEXUS_API_KEY;
+
+const api = axios.create({
+  baseURL: NEXUS_API_URL,
+  headers: NEXUS_API_KEY ? { 'X-API-Key': NEXUS_API_KEY } : {}
+});
 
 // Command: /start
 bot.start((ctx) => ctx.reply('Welcome to your Neural Nexus Mobile Agent! Send me anything to remember, or use /recall <query> to search.'));
@@ -14,7 +20,7 @@ bot.command('recall', async (ctx) => {
   if (!query) return ctx.reply('Please provide a query: /recall <query>');
 
   try {
-    const res = await axios.post(`${NEXUS_API_URL}/recall`, { query, limit: 3 });
+    const res = await api.post(`/recall`, { query, limit: 3 });
     const memories = res.data.memories;
 
     if (!memories || memories.length === 0) {
@@ -34,7 +40,7 @@ bot.on('text', async (ctx) => {
   if (text.startsWith('/')) return; // Ignore other commands
 
   try {
-    await axios.post(`${NEXUS_API_URL}/store`, { text, category: 'fact' });
+    await api.post(`/store`, { text, category: 'fact' });
     ctx.reply('✅ Saved to long-term memory.');
   } catch (err: any) {
     ctx.reply(`❌ Failed to store: ${err.message}`);

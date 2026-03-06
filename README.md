@@ -10,8 +10,10 @@ Neural Nexus is a framework-agnostic, long-term memory system for AI agents. It 
 - **Token Budgeting**: Built-in counting ensures memories never exceed your LLM's context window.
 - **Multi-Tenancy**: Secure partitioning of memories via `user_id` headers.
 - **Audit Logs**: Transparent SQLite-backed logging of all memory replacements and updates.
+- **Conflict Resolution**: Atomic locking and semantic deduplication to prevent data corruption.
 
 ### Universal Adapters
+- **TypeScript SDK**: Integration-ready client for Node.js and Browser.
 - **Web Dashboard**: Browse, search, and manually manage memories at `http://localhost:3000`.
 - **OpenAI Proxy**: Use Nexus with *any* app (Ollama, LM Studio) by pointing to `http://localhost:3001`.
 - **MCP Server**: Native integration for Claude Desktop and other MCP-compatible agents.
@@ -41,11 +43,12 @@ Copy `.env.example` to `.env` and fill in your values:
 ```env
 # API Server
 PORT=3000
+NEXUS_API_KEY=your_secret_key_here
 QDRANT_URL=http://localhost:6333
 
 # Adapters
 TELEGRAM_BOT_TOKEN=your_token_here
-LLM_TARGET_URL=http://localhost:11434/v1 # Ollama Example
+LLM_TARGET_URL=http://localhost:11434/v1
 ```
 
 ### 4. Running the Stack
@@ -57,6 +60,20 @@ LLM_TARGET_URL=http://localhost:11434/v1 # Ollama Example
 ---
 
 ## 📖 Adapter Guides
+
+### TypeScript SDK
+Integrate Neural Nexus into your own applications:
+```typescript
+import { NeuralNexusClient } from '@neural-nexus/sdk';
+
+const nexus = new NeuralNexusClient({
+  baseUrl: 'http://localhost:3000',
+  apiKey: 'your_secret_key'
+});
+
+await nexus.store({ text: "User prefers dark mode", category: "preference" });
+const memories = await nexus.recall({ query: "What are the user's UI preferences?" });
+```
 
 ### OpenAI-Compatible Proxy
 Point your favorite AI app (Chatbox, SillyTavern, etc.) to:
@@ -74,6 +91,7 @@ The proxy will automatically inject relevant memories into your system prompt.
 npm link
 nexus store "My favorite color is blue" --category preference
 nexus recall "What is my favorite color?"
+nexus export backup.jsonl
 ```
 
 ---
@@ -82,14 +100,11 @@ nexus recall "What is my favorite color?"
 
 ### Qdrant Connection Issues
 - **Error**: `Connection refused`.
-- **Fix**: Ensure Qdrant is running and `QDRANT_URL` in `.env` matches your setup (use `http://host.docker.internal:6333` if Nexus is in Docker but Qdrant is on the host).
+- **Fix**: Ensure Qdrant is running and `QDRANT_URL` in `.env` matches your setup.
 
 ### "Sharp" or "Sqlite3" Native Errors
 - **Error**: `Could not locate bindings file`.
 - **Fix**: Run `npm install --ignore-scripts=false sharp sqlite3` to rebuild native modules for your OS.
-
-### GPU Acceleration
-- **Embedding slow?**: Change `EMBEDDING_DEVICE=cuda` in `.env` if you have an NVIDIA GPU.
 
 ---
 

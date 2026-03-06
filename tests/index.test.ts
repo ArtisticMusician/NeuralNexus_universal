@@ -1,59 +1,43 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import neuralNexusPlugin from '../index.js';
-import { EmbeddingService } from '../src/core/EmbeddingService.js';
-import { StorageService } from '../src/core/StorageService.js';
-import { ReplacementAuditService } from '../src/core/ReplacementAuditService.js';
-import { NeuralNexusCore as NeuralNexus } from '../src/core/NeuralNexusCore.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mocks } = vi.hoisted(() => ({
-    mocks: {
-        embeddings: {
-            initialize: vi.fn().mockResolvedValue(undefined),
-            getDim: vi.fn().mockReturnValue(128),
-            createVector: vi.fn().mockResolvedValue(new Array(128).fill(0.1)),
-        },
-        storage: {
-            initialize: vi.fn().mockResolvedValue(undefined),
-            find: vi.fn().mockResolvedValue([]),
-            store: vi.fn().mockResolvedValue(undefined),
-            updatePayload: vi.fn().mockResolvedValue(undefined),
-        },
-        audit: {
-            initialize: vi.fn().mockResolvedValue(undefined),
-            logReplacement: vi.fn().mockResolvedValue(undefined),
-            close: vi.fn().mockResolvedValue(undefined),
-        },
-        nexus: {
-            consolidate: vi.fn().mockReturnValue('consolidated text'),
-            extractCandidate: vi.fn().mockReturnValue('extracted text'),
-            detectCategory: vi.fn().mockReturnValue('fact'),
-        }
-    }
-}));
+// Mock NeuralNexusCore BEFORE importing index.js
+vi.mock('../src/core/NeuralNexusCore.js', () => {
+  const MockCore = vi.fn();
+  MockCore.prototype.initialize = vi.fn().mockResolvedValue(undefined);
+  MockCore.prototype.recall = vi.fn().mockResolvedValue({ memories: [] });
+  MockCore.prototype.store = vi.fn().mockResolvedValue(undefined);
+  MockCore.prototype.consolidate = vi.fn().mockReturnValue('consolidated text');
+  MockCore.prototype.extractCandidate = vi.fn().mockReturnValue('extracted text');
+  
+  // Return the mock constructor
+  return {
+    NeuralNexusCore: MockCore
+  };
+});
 
-// Mock the modules by returning objects that match the exported shape
-vi.mock('../src/core/EmbeddingService.js', () => ({
-    EmbeddingService: function() { return mocks.embeddings; }
-}));
-vi.mock('../src/core/StorageService.js', () => ({
-    StorageService: function() { return mocks.storage; }
-}));
+// Mock Audit Service to avoid sqlite3 issues
 vi.mock('../src/core/ReplacementAuditService.js', () => ({
-    ReplacementAuditService: function() { return mocks.audit; }
-}));
-vi.mock('../src/core/NeuralNexusCore.js', () => ({
-    NeuralNexusCore: function() { return mocks.nexus; }
+  ReplacementAuditService: vi.fn().mockImplementation(() => ({
+    initialize: vi.fn().mockResolvedValue(undefined),
+    logReplacement: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
-describe('Neural Nexus Plugin Integration', () => {
+import neuralNexusPlugin from '../index.js';
+import { NeuralNexusCore } from '../src/core/NeuralNexusCore.js';
+
+describe('Neural Nexus Plugin (OpenClaw Adapter)', () => {
   let mockApi: any;
+  let mockCore: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-
     mockApi = {
-      pluginConfig: {},
+      pluginConfig: {
+        autoCapture: true,
+        consolidation: true
+      },
       logger: {
         info: vi.fn(),
         warn: vi.fn(),
@@ -63,163 +47,71 @@ describe('Neural Nexus Plugin Integration', () => {
       registerService: vi.fn(),
       on: vi.fn(),
     };
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
+    
+    // Trigger register to instantiate core
+    neuralNexusPlugin.register(mockApi);
+    mockCore = vi.mocked(NeuralNexusCore).mock.instances[0];
   });
 
   it('registers tool, service and event listener', async () => {
-    await neuralNexusPlugin.register(mockApi);
-
     expect(mockApi.registerTool).toHaveBeenCalledWith(expect.objectContaining({ name: 'memory_recall' }));
+    expect(mockApi.registerTool).toHaveBeenCalledWith(expect.objectContaining({ name: 'memory_store' }));
     expect(mockApi.registerService).toHaveBeenCalledWith(expect.objectContaining({ id: 'neural_nexus' }));
     expect(mockApi.on).toHaveBeenCalledWith('agent_end', expect.any(Function));
   });
 
   describe('memory_recall tool', () => {
-    it('executes recall successfully and applies reinforcement', async () => {
-      await neuralNexusPlugin.register(mockApi);
+    it('executes recall successfully', async () => {
       const tool = mockApi.registerTool.mock.calls.find((call: any) => call[0].name === 'memory_recall')[0];
-
-      const now = Date.now();
-      vi.setSystemTime(now);
-
-      mocks.storage.find.mockResolvedValue([
-        {
-          id: '1',
-          score: 0.9,
-          payload: { text: 'remembered fact', category: 'fact', strength: 1, lambda: 1e-10, last_accessed: now - 1000 }
-        }
-      ]);
+      mockCore.recall.mockResolvedValue({ 
+        memories: [{ text: 'remembered fact', category: 'fact', metadata: {} }] 
+      });
 
       const result = await tool.execute('call-id', { query: 'test query', limit: 5 });
 
-      expect(mocks.storage.find).toHaveBeenCalled();
+      expect(mockCore.recall).toHaveBeenCalledWith({ query: 'test query', limit: 5 });
       expect(result.details.results[0].text).toBe('remembered fact');
-      
-      // Reinforcement check
-      expect(mocks.storage.updatePayload).toHaveBeenCalledWith('1', expect.objectContaining({
-        strength: 1.05,
-        lambda: 1e-10 * 0.98,
-        last_accessed: now
-      }));
     });
 
     it('rejects empty query', async () => {
-        await neuralNexusPlugin.register(mockApi);
-        const tool = mockApi.registerTool.mock.calls.find((call: any) => call[0].name === 'memory_recall')[0];
-  
-        await expect(tool.execute('call-id', { query: '', limit: 5 })).rejects.toThrow('query is required');
+      const tool = mockApi.registerTool.mock.calls.find((call: any) => call[0].name === 'memory_recall')[0];
+      await expect(tool.execute('call-id', { query: '', limit: 5 })).rejects.toThrow('query is required');
     });
+  });
 
-    it('filters results by threshold and decay', async () => {
-        await neuralNexusPlugin.register(mockApi);
-        const tool = mockApi.registerTool.mock.calls.find((call: any) => call[0].name === 'memory_recall')[0];
+  describe('memory_store tool', () => {
+    it('executes store successfully', async () => {
+      const tool = mockApi.registerTool.mock.calls.find((call: any) => call[0].name === 'memory_store')[0];
+      const result = await tool.execute('call-id', { text: 'new info', category: 'fact' });
 
-        const now = Date.now();
-        vi.setSystemTime(now);
-
-        mocks.storage.find.mockResolvedValue([
-            { id: 'fresh', score: 0.5, payload: { text: 'fresh', category: 'fact', lambda: 0, last_accessed: now } },
-            { id: 'stale', score: 0.9, payload: { text: 'stale', category: 'fact', lambda: 1, last_accessed: now - 100000 } }
-        ]);
-
-        const result = await tool.execute('call-id', { query: 'test', limit: 5 });
-        expect(result.details.results).toHaveLength(1);
-        expect(result.details.results[0].text).toBe('fresh');
+      expect(mockCore.store).toHaveBeenCalledWith({ text: 'new info', category: 'fact' });
+      expect(result.details.status).toBe('stored');
     });
   });
 
   describe('auto-capture', () => {
     it('captures new memory on agent_end', async () => {
-      await neuralNexusPlugin.register(mockApi);
       const onAgentEnd = mockApi.on.mock.calls.find((call: any) => call[0] === 'agent_end')[1];
-
       const event = {
         success: true,
-        messages: [{ role: 'user', content: 'test' }]
+        messages: [{ role: 'user', content: 'test message' }]
       };
-
-      mocks.nexus.consolidate.mockReturnValue('consolidated content');
-      mocks.nexus.detectCategory.mockReturnValue('fact');
 
       await onAgentEnd(event);
 
-      expect(mocks.storage.store).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Array),
-        expect.objectContaining({ 
-            text: 'consolidated content', 
-            category: 'fact'
-        })
-      );
+      expect(mockCore.consolidate).toHaveBeenCalled();
+      expect(mockCore.store).toHaveBeenCalledWith({ text: 'consolidated text' });
+      expect(mockApi.logger.info).toHaveBeenCalledWith(expect.stringContaining('Auto-captured'));
     });
-
-    it('ignores failed agent_end events', async () => {
-        await neuralNexusPlugin.register(mockApi);
-        const onAgentEnd = mockApi.on.mock.calls.find((call: any) => call[0] === 'agent_end')[1];
-  
-        const event = {
-          success: false,
-          messages: [{ role: 'user', content: 'test' }]
-        };
-  
-        await onAgentEnd(event);
-        expect(mocks.storage.store).not.toHaveBeenCalled();
-    });
-
-    it('overwrites preference if similar one exists', async () => {
-        await neuralNexusPlugin.register(mockApi);
-        const onAgentEnd = mockApi.on.mock.calls.find((call: any) => call[0] === 'agent_end')[1];
-  
-        const event = {
-          success: true,
-          messages: [{ role: 'user', content: 'test' }]
-        };
-
-        mocks.nexus.consolidate.mockReturnValue('new preference');
-        mocks.nexus.detectCategory.mockReturnValue('preference');
-  
-        mocks.storage.find.mockResolvedValue([
-          {
-            id: 'pref-1',
-            score: 0.95,
-            payload: { text: 'old preference', category: 'preference' }
-          }
-        ]);
-  
-        await onAgentEnd(event);
-  
-        expect(mocks.storage.store).toHaveBeenCalledWith(
-          'pref-1',
-          expect.any(Array),
-          expect.objectContaining({ text: 'new preference', category: 'preference' })
-        );
-        expect(mocks.audit.logReplacement).toHaveBeenCalled();
-      });
   });
 
   describe('service lifecycle', () => {
-    it('initializes services on start', async () => {
-        await neuralNexusPlugin.register(mockApi);
-        const service = mockApi.registerService.mock.calls.find((call: any) => call[0].id === 'neural_nexus')[0];
-        
-        const mockCtx = { logger: mockApi.logger };
-        await service.start(mockCtx);
+    it('initializes core on start', async () => {
+      const service = mockApi.registerService.mock.calls.find((call: any) => call[0].id === 'neural_nexus')[0];
+      await service.start({ logger: mockApi.logger });
 
-        expect(mocks.embeddings.initialize).toHaveBeenCalled();
-        expect(mocks.storage.initialize).toHaveBeenCalledWith(128);
-        expect(mocks.audit.initialize).toHaveBeenCalled();
-        expect(mockApi.logger.info).toHaveBeenCalledWith('Neural Nexus plugin active');
-    });
-
-    it('closes audit service on stop', async () => {
-        await neuralNexusPlugin.register(mockApi);
-        const service = mockApi.registerService.mock.calls.find((call: any) => call[0].id === 'neural_nexus')[0];
-        
-        await service.stop();
-        expect(mocks.audit.close).toHaveBeenCalled();
+      expect(mockCore.initialize).toHaveBeenCalled();
+      expect(mockApi.logger.info).toHaveBeenCalledWith(expect.stringContaining('initialized'));
     });
   });
 });

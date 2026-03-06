@@ -9,6 +9,12 @@ import { fileURLToPath } from "url";
 import "dotenv/config";
 
 const API_URL = process.env.API_URL || "http://localhost:3000";
+const API_KEY = process.env.NEXUS_API_KEY;
+
+export const api = axios.create({
+  baseURL: API_URL,
+  headers: API_KEY ? { 'X-API-Key': API_KEY } : {}
+});
 
 export const server = new Server(
   {
@@ -73,7 +79,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     if (name === "recall_memory") {
-      const response = await axios.post(`${API_URL}/recall`, args);
+      const response = await api.post(`/recall`, args);
       const memories = response.data.memories.map((m: any) => 
         `[${m.category}] ${m.text}`
       ).join("\n");
@@ -84,7 +90,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "store_memory") {
-      await axios.post(`${API_URL}/store`, args);
+      await api.post(`/store`, args);
       return {
         content: [{ type: "text", text: "Memory stored successfully." }],
       };

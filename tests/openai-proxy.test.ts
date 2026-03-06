@@ -58,10 +58,12 @@ test("POST /v1/chat/completions injects context and handles tool calls", async (
   // Verify LLM was called with injected context
   const llmCall = axiosPostMock.mock.calls.find(call => call[0].endsWith("/chat/completions"));
   expect(llmCall).toBeDefined();
-  const llmPayload = llmCall[1];
-  expect(llmPayload.messages[0].role).toBe("system");
-  expect(llmPayload.messages[0].content).toContain("Relevant Memories:");
-  expect(llmPayload.messages[0].content).toContain("Past memory");
+  if (llmCall) {
+    const llmPayload = llmCall[1] as any;
+    expect(llmPayload.messages[0].role).toBe("system");
+    expect(llmPayload.messages[0].content).toContain("Relevant Memories:");
+    expect(llmPayload.messages[0].content).toContain("Past memory");
+  }
 
   // Verify store was called due to tool call interception
   expect(axiosPostMock).toHaveBeenCalledWith(expect.stringContaining("/store"), { text: "new memory" });

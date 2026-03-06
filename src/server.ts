@@ -25,7 +25,7 @@ server.register(fastifyStatic, {
   prefix: "/",
 });
 
-// Initialize Core
+// Initialize Core Configuration
 const config = normalizeMemoryConfig({
   embedding: {
     model: process.env.EMBEDDING_MODEL,
@@ -40,9 +40,27 @@ const config = normalizeMemoryConfig({
     enabled: process.env.REPLACEMENT_LOG_ENABLED !== "false",
     sqlitePath: process.env.REPLACEMENT_LOG_PATH,
   },
+  apiKey: process.env.NEXUS_API_KEY, // Security layer key
 });
 
 export const core = new NeuralNexusCore(config);
+
+/**
+ * Authentication Hook: Secures the API with an optional X-API-Key header.
+ * Only applied if NEXUS_API_KEY is set in environment.
+ */
+server.addHook("preHandler", async (request, reply) => {
+  if (!config.apiKey) return; // Authentication disabled if no key set
+
+  const apiKey = request.headers["x-api-key"] || (request.query as any)["api_key"];
+  
+  // Allow health check without key
+  if (request.url === "/health") return;
+
+  if (apiKey !== config.apiKey) {
+    return reply.status(401).send({ error: "Unauthorized: Invalid or missing X-API-Key" });
+  }
+});
 
 server.addHook("onReady", async () => {
   await core.initialize();
@@ -56,7 +74,8 @@ const getUserId = (request: any): string | undefined => {
   return request.body?.user_id || request.body?.userId;
 };
 
-// Endpoints
+// --- Endpoints ---
+
 server.post("/recall", async (request, reply) => {
   const body = request.body as any;
   const userId = getUserId(request);
@@ -116,6 +135,31 @@ server.get("/audit", async (request) => {
 
 server.get("/health", async () => {
   return { status: "ok" };
+});
+
+// Admin Endpoints
+server.get("/admin/export", async (request, reply) => {
+  const query = request.query as { userId?: string };
+  const memories = await core.exportMemories(query.userId);
+  
+  reply.header("Content-Disposition", "attachment; filename=nexus_export.jsonl");
+  reply.header("Content-Type", "application/x-ndjson");
+  
+  return memories.map(m => JSON.stringify(m)).join("\n");
+});
+
+server.post("/admin/import", async (request, reply) => {
+  const body = request.body as string; 
+  let memories: any[] = [];
+
+  try {
+    memories = JSON.parse(body);
+  } catch {
+    memories = body.trim().split("\n").map(line => JSON.parse(line));
+  }
+
+  await core.importMemories(memories);
+  return { status: "imported", count: memories.length };
 });
 
 export const start = async () => {
