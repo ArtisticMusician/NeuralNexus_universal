@@ -81,6 +81,19 @@ Use this for native tool support in Claude Desktop or AI-powered editors like Cu
 
 ---
 
+## 📚 Documentation Hub
+
+For a deep dive into the protocol, architecture, and advanced configuration, see the [docs/](./docs) folder:
+
+- **[Protocol Spec](./docs/protocol.md)**: NNMP v1.1 rules and standards.
+- **[Feature List](./docs/features.md)**: Detailed breakdown of memory logic.
+- **[API Reference](./docs/api.md)**: Endpoint definitions and examples.
+- **[Technical Audit](./docs/technical_audit.md)**: Architecture and singleton design.
+- **[Roadmap](./docs/roadmap.md)**: Development phases and status.
+- **[Research](./docs/research.md)**: Potential future features and exploration.
+
+---
+
 ## ⚙️ Configuration (Environment Overrides)
 
 Neural Nexus is highly tunable via environment variables:
