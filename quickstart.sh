@@ -15,8 +15,13 @@ if [ ! -f .env ]; then
     read -p "Enter a new API Key (or press Enter for 'nexus-secret'): " API_KEY
     API_KEY=${API_KEY:-nexus-secret}
     
-    # Update the key in .env
-    sed -i.bak "s/NEXUS_API_KEY=your_secret_key_here/NEXUS_API_KEY=$API_KEY/" .env && rm .env.bak
+    # Cross-platform sed for Linux and macOS
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s/NEXUS_API_KEY=your_secret_key_here/NEXUS_API_KEY=$API_KEY/" .env
+    else
+        sed -i "s/NEXUS_API_KEY=your_secret_key_here/NEXUS_API_KEY=$API_KEY/" .env
+    fi
+    
     echo "✅ Configuration created."
 else
     echo "✅ .env file found."
