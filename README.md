@@ -44,6 +44,43 @@ The OpenAI Proxy features a custom **Transform Stream** that buffers and parses 
 
 ---
 
+## 📖 Usage Guides
+
+### 1. The OpenAI Proxy Method (Universal Integration)
+Use this to give *any* OpenAI-compatible app (Chatbox, SillyTavern, or custom scripts) long-term memory.
+
+1.  **Start the Proxy**:
+    ```bash
+    npm run proxy:start
+    ```
+2.  **Configure your AI App**:
+    *   **Base URL**: `http://localhost:3001/v1`
+    *   **API Key**: (Any value, or your `LLM_API_KEY`)
+3.  **Chat**: The proxy will automatically search your Nexus for relevant context and inject it into the prompt. It also intercepts "store_memory" tool calls to save new facts.
+
+### 2. The MCP Method (Claude & IDE Integration)
+Use this for native tool support in Claude Desktop or AI-powered editors like Cursor.
+
+1.  **Build the Project**:
+    ```bash
+    npm run build
+    ```
+2.  **Add to Config**:
+    Add the following to your `claude_desktop_config.json`:
+    ```json
+    {
+      "mjs-servers": {
+        "neural-nexus": {
+          "command": "node",
+          "args": ["/absolute/path/to/dist/src/mcp.js"]
+        }
+      }
+    }
+    ```
+3.  **Proactive Memory**: Claude will now see `recall_memory` and `store_memory` as native tools.
+
+---
+
 ## ⚙️ Configuration (Environment Overrides)
 
 Neural Nexus is highly tunable via environment variables:
