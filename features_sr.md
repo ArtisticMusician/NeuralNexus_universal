@@ -1,188 +1,91 @@
-# Neural Nexus Features
+# Neural Nexus: Feature Specifications & Protocol Rules
 
-## What Neural Nexus Is
-Neural Nexus is a long-term memory plugin for OpenClaw. It helps an AI remember useful information across conversations by storing and retrieving meaning-based memories.
-
----
-
-## 1) Semantic Memory Storage
-Neural Nexus converts text into vectors (numeric representations of meaning) and stores them in Qdrant.
-
-Why this matters:
-- It can find related ideas even when wording is different.
-- Retrieval is smarter than plain keyword matching.
+Neural Nexus has evolved from a plugin into a **Universal AI Memory Protocol (NNMP)**. It provides a standardized, framework-agnostic "Second Brain" for AI agents.
 
 ---
 
-## 2) Automatic Memory Capture
-After successful agent interactions, the plugin can automatically decide what to save.
+## 🏗️ Architectural Features
 
-Key points:
-- Controlled by `autoCapture` (default: on).
-- Runs on `agent_end` events.
-- Ignores failed or invalid events.
+### 1) Singleton Orchestration (Unified Core)
+All adapters (OpenAI Proxy, MCP Server, Telegram Bot) share a direct, initialized instance of the `NeuralNexusCore`.
+- **Benefit**: Zero-latency internal communication.
+- **Benefit**: Consistent state across all platforms.
 
----
-
-## 3) Built-in Recall Tool (`memory_recall`)
-Neural Nexus registers a tool the AI can call to search long-term memory.
-
-Inputs:
-- `query` (required)
-- `limit` (optional, 1-20, default 5)
-
-Output:
-- Matching memories with adjusted scores.
+### 2) Universal API Gateway
+Exposes a standardized REST API for interaction with any external system.
+- **Endpoints**: `/recall`, `/store`, `/reinforce`, `/audit`, `/admin/export`, `/admin/import`.
+- **Security**: Global `X-API-Key` protection.
 
 ---
 
-## 4) Memory Categories
-Each memory is categorized as:
-- `preference`
-- `fact`
-- `entity`
-- `decision`
-- `other`
+## 🧠 Memory Logic & Intelligence
 
-Why this matters:
-- Different categories are handled differently for decay and reinforcement.
+### 3) Hybrid Search with RRF
+Nexus combines semantic understanding with keyword precision using **Reciprocal Rank Fusion (RRF)**.
+- **Vector Search**: Cosine similarity via `BGE-Small`.
+- **Keyword Search**: Full-text BM25 indexing via Qdrant.
+- **RRF Merging**: Statistically sound result merging ($k=60$) that eliminates arbitrary weight constants.
 
----
+### 4) Semantic Deduplication (The 0.95 Rule)
+Prevents "fact bloat" by enforcing semantic integrity.
+- If new information is **>= 0.95 similar** to an existing memory in the user's partition, the existing memory is **merged/updated** instead of duplicated.
 
-## 5) Category-Based Decay
-Memories fade at different rates depending on category (`lambda`).
+### 5) Temporal Decay Engine (v1.1)
+Adjusts relevance based on time and importance.
+- **Formula**: `decayed_score = base_score * (1 / (1 + lambda * deltaT)) * strength`.
+- **Stable Defaults**: $\lambda = 1e^{-10}$ ensures memories remain relevant for weeks/months unless manually reinforced or forgotten.
 
-Current behavior:
-- `preference`: `lambda = 0` (no decay)
-- `fact`: slow decay
-- `entity`: medium-slow decay
-- `decision`: faster decay
-- `other`: fastest decay
+### 6) Atomic Locking
+Uses `async-lock` to prevent race conditions.
+- Locks are applied per `userId` during storage and per `memoryId` during reinforcement.
 
 ---
 
-## 6) Time-Adjusted Memory Ranking
-Recall scores are adjusted using:
-- similarity score
-- last access time
-- decay rate (`lambda`)
-- memory strength
+## 🔒 Privacy & Compliance
 
-Result:
-- More relevant and recently reinforced memories rank higher.
+### 7) Strict Multi-Tenancy
+Mandatory isolation of user data.
+- All storage and retrieval operations are hard-filtered by `userId`.
+- Data leakage between users is mathematically and architecturally prevented.
 
----
-
-## 7) Preference Overwrite Logic
-Preferences are treated as stable memory.
-
-Behavior:
-- If a new preference is very similar to an existing one (high threshold around `0.92`), it overwrites the old memory instead of adding a duplicate.
-- Stored preferences have `lambda = 0` and do not decay.
+### 8) Replacement Audit Trail
+A transparent, SQLite-backed log of all memory merges.
+- Tracks: `oldText`, `newText`, `similarityScore`, and `timestamp`.
 
 ---
 
-## 8) Duplicate Prevention for Non-Preferences
-For non-preference memories, Neural Nexus avoids storing near-duplicates.
+## 🔌 Ecosystem Features (Adapters)
 
-Result:
-- Cleaner memory set with less repetition.
+### 9) OpenAI Streaming Proxy
+A high-performance bridge for OpenAI-compatible applications.
+- **Streaming Interceptor**: Uses a custom Transform Stream to detect and execute memory tool calls *during* active SSE streams.
+- **Context Injection**: Automatically enriches system prompts with relevant memories.
 
----
+### 10) MCP Server (Model Context Protocol)
+Native tool support for Claude Desktop and AI-powered IDEs.
+- Exposes `recall_memory` and `store_memory` as standard MCP tools.
 
-## 9) Reinforcement on Recall
-When a memory is recalled:
-- `last_accessed` is updated.
-- For reinforce-enabled categories, `strength` increases (`+0.05`).
-- If `lambda` exists, it is slightly reduced (`* 0.98`), making future decay slower.
+### 11) Mobile Agent (Telegram Bot)
+A Telegraf-powered mobile interface for capture and recall on the go.
 
-Note:
-- Preferences are excluded from reinforcement because they are already non-decaying.
-
----
-
-## 10) Conversation Consolidation
-For longer conversations, the plugin can combine recent user messages into one memory candidate.
-
-Controls:
-- `consolidation` (default: on)
-- `consolidationThreshold` (default: 4 user messages)
-
-Benefits:
-- Captures meaningful context without storing too many small fragments.
+### 12) Official TypeScript SDK
+A fully typed client library (`@neural-nexus/sdk`) for rapid integration into Node.js or Browser apps.
 
 ---
 
-## 11) Candidate Quality Filtering
-Neural Nexus filters memory candidates to reduce noise.
+## 💾 Data Sovereignty
 
-It does things like:
-- Focus on user-role messages.
-- Ignore very short/low-value content.
-- Normalize whitespace.
-- Limit candidate length (~1200 chars).
+### 13) NDJSON Portability
+Neural Nexus enforces a "No Lock-in" policy.
+- **Bulk Export/Import**: Full support for Line-delimited JSON (NDJSON) for backup, migration, or sharing.
 
 ---
 
-## 12) Rule-Based Category Detection
-Category detection uses simple language cues.
+## ⚙️ Configuration & Tunability
 
-Examples:
-- "prefer/like/dislike" -> `preference`
-- "decided/chose/instead of" -> `decision`
-- "is a/called" -> `entity`
-- Otherwise -> `fact`
-
----
-
-## 13) Initialization Safety Checks
-Before capture/recall, the plugin verifies that:
-- Embedding model is initialized.
-- Qdrant collection exists and matches vector dimensions.
-
-If setup fails, it logs errors and avoids unsafe operations.
-
----
-
-## 14) Config Normalization + Defaults
-If config values are missing, Neural Nexus applies defaults.
-
-Important defaults:
-- Model: `Xenova/bge-small-en-v1.5`
-- Device: `cuda` (or `cpu` if configured)
-- Qdrant URL: `http://localhost:6333`
-- Collection: `openclaw_memories`
-- Auto-capture/recall/consolidation: enabled
-- Consolidation threshold: `4`
-
-Also supports `${ENV_VAR}` substitution in config strings.
-
----
-
-## 15) E5 Model Compatibility
-If the embedding model name includes `e5`, text is prefixed with `query: ` to match E5 retrieval conventions.
-
-Why this matters:
-- Better search quality for E5-style models.
-
----
-
-## 16) Service Registration
-The plugin registers itself as memory service ID `neural_nexus` and logs when active.
-
----
-
-## 17) Automatic Qdrant Collection Setup
-At startup, it checks whether the target collection exists.
-If not, it creates one with cosine distance and the correct vector size.
-
----
-
-## Bottom Line
-Neural Nexus gives an AI practical long-term memory:
-- smart semantic search
-- automatic capture and recall
-- category-aware forgetting
-- stable preference tracking
-- duplicate control
-- reinforcement for frequently used memories
+### 14) Dynamic Overrides
+All core thresholds are tunable via environment variables:
+- `SIMILARITY_THRESHOLD`: Merge sensitivity.
+- `RECALL_THRESHOLD`: Retrieval floor.
+- `DECAY_LAMBDA`: Forgetting speed.
+- `RRF_K`: Fusion constant.
