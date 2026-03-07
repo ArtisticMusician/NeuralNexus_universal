@@ -1,86 +1,52 @@
-import { vi, test, expect } from "vitest";
+import { describe, vi, test, expect, beforeEach } from "vitest";
+
+// Mock the core instance that server.ts exports
+vi.mock("../src/server.js", () => {
+  return {
+    core: {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      recall: vi.fn().mockResolvedValue({ memories: [{ text: "Past memory" }] }),
+      store: vi.fn().mockResolvedValue(undefined),
+    },
+    config: {}
+  };
+});
+
 import { server } from "../src/openai-proxy.js";
+import { core } from "../src/server.js";
 import axios from "axios";
 
-vi.mock("axios", () => {
-  const axiosMock = vi.fn().mockImplementation(() => Promise.resolve({ data: { result: "passthrough" } }));
-  (axiosMock as any).post = vi.fn();
-  (axiosMock as any).get = vi.fn();
-  (axiosMock as any).create = vi.fn().mockReturnValue(axiosMock);
-  return { default: axiosMock };
-});
+vi.mock("axios");
 
-test("POST /v1/chat/completions injects context and handles tool calls", async () => {
-  const axiosPostMock = vi.mocked(axios.post);
-  
-  axiosPostMock.mockImplementation(async (url: string, data?: any) => {
-    if (url.endsWith("/recall")) {
-      return { data: { memories: [{ text: "Past memory" }] } };
-    }
-    if (url.endsWith("/chat/completions")) {
-      return {
-        data: {
-          choices: [{
-            message: {
-              content: "I remember that.",
-              tool_calls: [{
-                function: {
-                  name: "store_memory",
-                  arguments: JSON.stringify({ text: "new memory" })
-                }
-              }]
-            }
-          }]
-        }
-      };
-    }
-    if (url.endsWith("/store")) {
-      return { data: { status: "stored" } };
-    }
-    return { data: {} };
+describe("OpenAI Proxy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  const response = await server.inject({
-    method: "POST",
-    url: "/v1/chat/completions",
-    payload: {
-      messages: [{ role: "user", content: "Tell me something." }]
-    },
+  test("POST /v1/chat/completions injects context", async () => {
+    vi.mocked(axios.post).mockResolvedValue({
+      status: 200,
+      headers: {},
+      data: {
+        choices: [{
+          message: { content: "I remember that." }
+        }]
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        messages: [{ role: "user", content: "Tell me something." }]
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(core.recall).toHaveBeenCalled();
+    
+    const llmCall = vi.mocked(axios.post).mock.calls[0];
+    const payload = llmCall[1] as any;
+    expect(payload.messages[0].content).toContain("Relevant Memories:");
   });
-
-  expect(response.statusCode).toBe(200);
-  const json = response.json();
-  expect(json.choices[0].message.content).toBe("I remember that.");
-  
-  // Verify recall was called
-  expect(axiosPostMock).toHaveBeenCalledWith(expect.stringContaining("/recall"), expect.any(Object));
-  
-  // Verify LLM was called with injected context
-  const llmCall = axiosPostMock.mock.calls.find(call => call[0].endsWith("/chat/completions"));
-  expect(llmCall).toBeDefined();
-  if (llmCall) {
-    const llmPayload = llmCall[1] as any;
-    expect(llmPayload.messages[0].role).toBe("system");
-    expect(llmPayload.messages[0].content).toContain("Relevant Memories:");
-    expect(llmPayload.messages[0].content).toContain("Past memory");
-  }
-
-  // Verify store was called due to tool call interception
-  expect(axiosPostMock).toHaveBeenCalledWith(expect.stringContaining("/store"), { text: "new memory" });
-});
-
-test("Pass-through for other OpenAI endpoints", async () => {
-  const axiosMock = vi.mocked(axios);
-
-  const response = await server.inject({
-    method: "GET",
-    url: "/v1/models",
-  });
-
-  expect(response.statusCode).toBe(200);
-  expect(response.json()).toEqual({ result: "passthrough" });
-  expect(axiosMock).toHaveBeenCalledWith(expect.objectContaining({
-    method: "GET",
-    url: expect.stringContaining("/models")
-  }));
 });

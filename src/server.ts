@@ -26,7 +26,7 @@ server.register(fastifyStatic, {
 });
 
 // Initialize Core Configuration
-const config = normalizeMemoryConfig({
+export const config = normalizeMemoryConfig({
   embedding: {
     model: process.env.EMBEDDING_MODEL,
     device: process.env.EMBEDDING_DEVICE || "cpu",
@@ -40,25 +40,20 @@ const config = normalizeMemoryConfig({
     enabled: process.env.REPLACEMENT_LOG_ENABLED !== "false",
     sqlitePath: process.env.REPLACEMENT_LOG_PATH,
   },
-  apiKey: process.env.NEXUS_API_KEY, // Security layer key
+  apiKey: process.env.NEXUS_API_KEY,
 });
 
 export const core = new NeuralNexusCore(config);
 
 /**
  * Authentication Hook: Secures the API with an optional X-API-Key header.
- * Only applied if NEXUS_API_KEY is set in environment.
  */
 server.addHook("preHandler", async (request, reply) => {
-  if (!config.apiKey) return; // Authentication disabled if no key set
-
+  if (!config.apiKey) return;
   const apiKey = request.headers["x-api-key"] || (request.query as any)["api_key"];
-  
-  // Allow health check without key
   if (request.url === "/health") return;
-
   if (apiKey !== config.apiKey) {
-    return reply.status(401).send({ error: "Unauthorized: Invalid or missing X-API-Key" });
+    return reply.status(401).send({ error: "Unauthorized" });
   }
 });
 
@@ -78,86 +73,57 @@ const getUserId = (request: any): string | undefined => {
 
 server.post("/recall", async (request, reply) => {
   const body = request.body as any;
-  const userId = getUserId(request);
-  
-  if (!body.query) {
-    return reply.status(400).send({ error: "query is required" });
-  }
-
-  const results = await core.recall({
+  return await core.recall({
     query: body.query,
     limit: body.limit,
-    userId: userId,
+    userId: getUserId(request),
     maxTokens: body.max_tokens || body.maxTokens,
   });
-
-  return results;
 });
 
 server.post("/store", async (request, reply) => {
   const body = request.body as any;
-  const userId = getUserId(request);
-
-  if (!body.text) {
-    return reply.status(400).send({ error: "text is required" });
-  }
-
   await core.store({
     text: body.text,
     category: body.category,
-    userId: userId,
+    userId: getUserId(request),
     metadata: body.metadata,
   });
-
   return reply.status(201).send({ status: "stored" });
 });
 
 server.post("/reinforce", async (request, reply) => {
   const body = request.body as any;
-  
-  if (!body.memory_id && !body.memoryId) {
-    return reply.status(400).send({ error: "memory_id is required" });
-  }
-
   await core.reinforce({
     memoryId: body.memory_id || body.memoryId,
-    strengthAdjustment: body.strength_adjustment ?? 0.05,
+    strengthAdjustment: body.strength_adjustment,
   });
-
   return { status: "reinforced" };
 });
 
 server.get("/audit", async (request) => {
   const query = request.query as { limit?: string };
-  const limit = query.limit ? parseInt(query.limit) : 50;
-  return await core.getAuditLogs(limit);
+  return await core.getAuditLogs(query.limit ? parseInt(query.limit) : 50);
 });
 
-server.get("/health", async () => {
-  return { status: "ok" };
-});
+server.get("/health", async () => ({ status: "ok" }));
 
-// Admin Endpoints
 server.get("/admin/export", async (request, reply) => {
   const query = request.query as { userId?: string };
   const memories = await core.exportMemories(query.userId);
-  
   reply.header("Content-Disposition", "attachment; filename=nexus_export.jsonl");
   reply.header("Content-Type", "application/x-ndjson");
-  
   return memories.map(m => JSON.stringify(m)).join("\n");
 });
 
-server.post("/admin/import", async (request, reply) => {
+server.post("/admin/import", async (request) => {
   const body = request.body as string; 
   let memories: any[] = [];
-
   try {
     memories = JSON.parse(body);
   } catch {
     memories = body.trim().split("\n").map(line => JSON.parse(line));
   }
-
   await core.importMemories(memories);
   return { status: "imported", count: memories.length };
 });
@@ -165,8 +131,7 @@ server.post("/admin/import", async (request, reply) => {
 export const start = async () => {
   try {
     const port = parseInt(process.env.PORT || "3000");
-    const host = process.env.HOST || "0.0.0.0";
-    await server.listen({ port, host });
+    await server.listen({ port, host: "0.0.0.0" });
   } catch (err) {
     server.log.error(err);
     process.exit(1);

@@ -16,8 +16,8 @@ import AsyncLock from "async-lock";
 
 /**
  * NeuralNexusCore: The central Orchestration Layer.
- * It coordinates between Embedding, Storage, Decay, and Audit services.
- * It enforces Atomic Locking and Semantic Deduplication.
+ * Refactored for privacy enforcement, improved search merging, 
+ * and configurable lifecycle management.
  */
 export class NeuralNexusCore {
   private embedding: EmbeddingService;
@@ -34,25 +34,30 @@ export class NeuralNexusCore {
     this.lock = new AsyncLock();
   }
 
-  /**
-   * Initialize all sub-services.
-   */
   async initialize() {
     await this.embedding.initialize();
     const dim = this.embedding.getDim();
-    if (dim === null) {
-      throw new Error("NeuralNexusCore: Could not determine embedding dimension.");
-    }
+    if (dim === null) throw new Error("Could not determine embedding dimension.");
     await this.storage.initialize(dim);
     await this.audit.initialize();
   }
 
   /**
-   * Recall relevant memories using Hybrid Search (Vector + Keyword) and Decay scoring.
+   * Recall memories using Hybrid Search + RRF + Decay scoring.
+   * Strictly partitioned by userId.
    */
   async recall(request: RecallRequest): Promise<RecallResponse> {
+    const userId = request.userId || "anonymous";
     const vector = await this.embedding.createVector(request.query);
-    const results = await this.storage.find(vector, request.limit ?? 10, request.userId, request.query);
+    
+    // Find points with strict userId partition and RRF merging
+    const results = await this.storage.find(
+      vector, 
+      request.limit || this.config.search.limit, 
+      userId, 
+      request.query,
+      this.config.search.rrfK
+    );
 
     const memories: MemoryEntry[] = results.map((res: any) => {
       const payload = res.payload;
@@ -60,7 +65,7 @@ export class NeuralNexusCore {
       const decayedScore = this.decay.calculateScore(
         score,
         payload.last_accessed,
-        0.0000001, 
+        this.config.decay.defaultLambda, 
         payload.strength ?? 1
       );
 
@@ -76,27 +81,30 @@ export class NeuralNexusCore {
       };
     });
 
+    // Sort by decayed score and apply threshold
     memories.sort((a, b) => (b.metadata.decayed_score as number) - (a.metadata.decayed_score as number));
+    const filtered = memories.filter(m => (m.metadata.decayed_score as number) >= this.config.thresholds.recall);
 
     if (request.maxTokens) {
-      return this.applyTokenBudget(memories, request.maxTokens);
+      return this.applyTokenBudget(filtered, request.maxTokens);
     }
 
-    return { memories };
+    return { memories: filtered };
   }
 
   /**
-   * Store or Update a memory with semantic deduplication and atomic locking.
+   * Store or merge memory with strict userId enforcement.
    */
   async store(request: StoreRequest): Promise<void> {
-    const vector = await this.embedding.createVector(request.text);
     const userId = request.userId || "anonymous";
+    const vector = await this.embedding.createVector(request.text);
 
     await this.lock.acquire(`store:${userId}`, async () => {
-      const existing = await this.storage.find(vector, 1, request.userId);
-      const similarityThreshold = 0.95;
+      // Deduplicate ONLY within the user's partition
+      const existing = await this.storage.find(vector, 1, userId);
+      const threshold = this.config.thresholds.similarity;
 
-      if (existing.length > 0 && existing[0].score >= similarityThreshold) {
+      if (existing.length > 0 && existing[0].score >= threshold) {
         return this.handleMerge(existing[0], request);
       }
 
@@ -107,7 +115,7 @@ export class NeuralNexusCore {
         last_accessed: Date.now(),
         created_at: Date.now(),
         strength: 1,
-        userId: request.userId,
+        userId: userId,
         ...request.metadata
       };
 
@@ -115,9 +123,6 @@ export class NeuralNexusCore {
     });
   }
 
-  /**
-   * Reinforce a memory's strength atomically.
-   */
   async reinforce(request: ReinforceRequest): Promise<void> {
     await this.lock.acquire(`reinforce:${request.memoryId}`, async () => {
       const point = await this.storage.getPoint(request.memoryId);
@@ -135,9 +140,9 @@ export class NeuralNexusCore {
     return await this.audit.getLogs(limit);
   }
 
-  async exportMemories(userId?: string) {
+  async exportMemories(userId: string = "anonymous") {
     const points = await this.storage.scrollAll(userId);
-    return points.map((p) => ({
+    return points.map(p => ({
       id: p.id,
       vector: p.vector,
       payload: p.payload,
@@ -146,20 +151,27 @@ export class NeuralNexusCore {
 
   async importMemories(memories: any[]) {
     if (!Array.isArray(memories)) throw new Error("Invalid import format");
-    
-    const CHUNK_SIZE = 50;
-    for (let i = 0; i < memories.length; i += CHUNK_SIZE) {
-      const chunk = memories.slice(i, i + CHUNK_SIZE);
-      const points = chunk.map((m) => ({
-        id: m.id || uuidv4(),
-        vector: m.vector || [], 
-        payload: m.payload || {},
-      }));
-      await this.storage.storeBatch(points);
-    }
+    const points = memories.map(m => ({
+      id: m.id || uuidv4(),
+      vector: m.vector || [], 
+      payload: { ...m.payload, userId: m.payload?.userId || "anonymous" },
+    }));
+    await this.storage.storeBatch(points);
   }
 
-  // --- Public Helper Logic (Used by adapters and for testing) ---
+  public detectCategory(text: string): MemoryCategory {
+    const lower = text.toLowerCase();
+    // Improved keyword detection
+    const prefKeys = ["prefer", "like", "love", "hate", "dislike", "favorite", "hobby", "habit"];
+    const decKeys = ["decided", "chose", "selected", "plan", "scheduled", "instead of", "going to"];
+    const entityKeys = ["is a", "called", "named", "located", "works at", "member of"];
+
+    if (prefKeys.some(k => lower.includes(k))) return "preference";
+    if (decKeys.some(k => lower.includes(k))) return "decision";
+    if (entityKeys.some(k => lower.includes(k))) return "entity";
+    
+    return "fact";
+  }
 
   public async applyTokenBudget(memories: MemoryEntry[], maxTokens: number): Promise<RecallResponse> {
     const budgeted: MemoryEntry[] = [];
@@ -173,108 +185,6 @@ export class NeuralNexusCore {
     }
     return { memories: budgeted };
   }
-
-  public detectCategory(text: string): MemoryCategory {
-    const lower = text.toLowerCase();
-    if (lower.includes("prefer") || lower.includes("like") || lower.includes("dislike")) return "preference";
-    if (lower.includes("decided") || lower.includes("chose") || lower.includes("instead of")) return "decision";
-    if (lower.includes("is a") || lower.includes("called")) return "entity";
-    return "fact";
-  }
-
-  public static normalizeWhitespace(value: string): string {
-    return value.replace(/\s+/g, " ").trim();
-  }
-
-  public extractText(content: unknown): string | null {
-    if (typeof content === "string") {
-      const normalized = NeuralNexusCore.normalizeWhitespace(content);
-      return normalized.length > 0 ? normalized : null;
-    }
-
-    if (Array.isArray(content)) {
-      const parts: string[] = [];
-      for (const part of content) {
-        if (!part || typeof part !== "object") {
-          continue;
-        }
-        const maybeText = (part as { text?: unknown }).text;
-        if (typeof maybeText === "string" && maybeText.trim()) {
-          parts.push(maybeText.trim());
-        }
-      }
-      if (parts.length > 0) {
-        return NeuralNexusCore.normalizeWhitespace(parts.join(" "));
-      }
-    }
-
-    return null;
-  }
-
-  public userMessages(messages: unknown[]): string[] {
-    const texts: string[] = [];
-
-    for (const msg of messages) {
-      if (!msg || typeof msg !== "object") {
-        continue;
-      }
-
-      const typed = msg as any;
-      if (typed.role !== "user") {
-        continue;
-      }
-
-      const text = this.extractText(typed.content);
-      if (text) {
-        texts.push(text);
-      }
-    }
-
-    return texts;
-  }
-
-  public extractCandidate(messages: unknown[]): string | null {
-    const userTexts = this.userMessages(messages);
-    const last = userTexts[userTexts.length - 1];
-    if (!last || last.length < 25) {
-      return null;
-    }
-    return last.slice(0, 1200);
-  }
-
-  public consolidate(messages: unknown[], threshold: number): string | null {
-    const userTexts = this.userMessages(messages);
-    if (userTexts.length === 0) {
-      return null;
-    }
-
-    if (userTexts.length < threshold) {
-      return this.extractCandidate(messages);
-    }
-
-    const deduped: string[] = [];
-    const seen = new Set<string>();
-
-    for (const text of userTexts.slice(-12)) {
-      if (text.length < 10) {
-        continue;
-      }
-      const key = text.toLowerCase();
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      deduped.push(text);
-    }
-
-    if (deduped.length === 0) {
-      return null;
-    }
-
-    return NeuralNexusCore.normalizeWhitespace(deduped.join(" ")).slice(0, 1200);
-  }
-
-  // --- Internal Logic ---
 
   private async handleMerge(bestMatch: any, request: StoreRequest) {
     const id = bestMatch.id.toString();
@@ -293,5 +203,18 @@ export class NeuralNexusCore {
       similarityScore: bestMatch.score,
       replacedAt: Date.now()
     });
+  }
+
+  public extractCandidate(messages: any[]): string | null {
+    // Simple logic to get last user message
+    const userMsg = messages.filter(m => m.role === "user").pop();
+    if (!userMsg || !userMsg.content) return null;
+    return typeof userMsg.content === "string" ? userMsg.content : null;
+  }
+
+  public consolidate(messages: any[], threshold: number): string | null {
+    const userMsgs = messages.filter(m => m.role === "user");
+    if (userMsgs.length < threshold) return this.extractCandidate(messages);
+    return userMsgs.map(m => m.content).join("\n").slice(0, 2000);
   }
 }

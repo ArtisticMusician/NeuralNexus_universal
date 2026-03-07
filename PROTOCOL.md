@@ -1,41 +1,37 @@
-# NNMP: Neural Nexus Memory Protocol (v1.0)
+# NNMP: Neural Nexus Memory Protocol (v1.1)
 
-The **Neural Nexus Memory Protocol (NNMP)** is a standardized interface for long-term AI memory. It defines a language-agnostic way for AI agents to store, recall, and manage context across different platforms.
+The **Neural Nexus Memory Protocol (NNMP)** is a standardized interface for long-term AI memory.
 
 ## 1. Core Concepts
 
 ### 1.1 Memory Entry
-A single unit of knowledge. Every memory MUST follow this structure:
-- `id`: Unique UUID (v4).
-- `text`: Raw string content.
-- `category`: One of `fact`, `preference`, `decision`, `entity`, `other`.
-- `vector`: Float array representing the semantic embedding.
-- `metadata`: Object containing `created_at`, `last_accessed`, and `strength`.
+Standardized JSON structure:
+- `id`: UUID (v4).
+- `text`: String content.
+- `category`: `fact`, `preference`, `decision`, `entity`, `other`.
+- `vector`: Float array.
+- `metadata`: `created_at`, `last_accessed`, `strength`, `userId`.
 
 ### 1.2 The Decay Engine
-Relevance is not static. NNMP implementations MUST use a decay algorithm to adjust the semantic similarity score based on:
-- **Base Similarity**: Cosine distance between query and memory vectors.
-- **Time Decay**: Reduced relevance as time passes without access.
-- **Strength**: Manual reinforcement multiplier.
+Formula: `decayed_score = base_score * (1 / (1 + lambda * (now - last_accessed))) * strength`.
+- Default $\lambda = 1e^{-10}$ (stable long-term memory).
 
-## 2. API Interface
+## 2. Interface Standards
 
-### 2.1 Storage (`POST /store`)
-Ingests new information.
-- **Constraint**: Must perform **Semantic Deduplication** (merge if similarity > 0.95).
-- **Constraint**: Must be atomic per user.
+### 2.1 Hybrid Search & Scoring
+Implementations MUST use **Reciprocal Rank Fusion (RRF)** to merge Vector and Keyword results.
+- **RRF Formula**: $score = \sum_{rank \in R} \frac{1}{k + rank}$
+- Default $k = 60$.
 
-### 2.2 Recall (`POST /recall`)
-Retrieves context.
-- **Constraint**: Must support **Hybrid Search** (Vector + BM25/Keyword).
-- **Constraint**: Must support **Token Budgeting** to prevent LLM context overflow.
+### 2.2 Strict Multi-Tenancy
+- Implementations MUST enforce mandatory `userId` filtering at the storage layer.
+- Searching across all users is prohibited to prevent data leaks.
 
-### 2.3 Reinforcement (`POST /reinforce`)
-Adjusts the "importance" of a memory manually.
+### 2.3 Atomicity
+- Implementations MUST use atomic locking (per `userId` and `memoryId`) to prevent race conditions during deduplication.
 
-## 3. Security Model
-- All traffic SHOULD be secured via `X-API-Key` headers.
-- Multi-tenancy MUST be supported via `user_id` partitioning.
+### 2.4 Streaming Interception
+- Compliant Proxies MUST buffer/parse SSE streams to detect and execute memory-storage tool calls in real-time.
 
-## 4. Portability
-- All NNMP-compliant servers MUST support export/import in **NDJSON** (Line-delimited JSON) format to prevent user lock-in.
+## 3. Data Portability
+- MUST support Line-delimited JSON (NDJSON) for all user-facing export/import operations.

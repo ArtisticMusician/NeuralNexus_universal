@@ -1,5 +1,9 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 
+/**
+ * StorageService handles interaction with the Qdrant Vector Database.
+ * It implements Hybrid Search (Vector + BM25) and RRF (Reciprocal Rank Fusion).
+ */
 export class StorageService {
   private client: QdrantClient;
 
@@ -35,59 +39,78 @@ export class StorageService {
     return points.length > 0 ? points[0] : null;
   }
 
-  async find(vector: number[], limit: number, userId?: string, query?: string) {
-    const filter = userId ? { must: [{ key: "userId", match: { value: userId } }] } : undefined;
+  /**
+   * Hybrid Search using Reciprocal Rank Fusion (RRF).
+   * Combines Vector search and Keyword (Full-text) search results.
+   */
+  async find(vector: number[], limit: number, userId: string, query?: string, rrfK: number = 60) {
+    // Strict userId filtering is enforced here
+    const filter = { must: [{ key: "userId", match: { value: userId } }] };
     
+    // 1. Vector Search
     const vectorResults = await this.client.search(this.collection, { 
       vector, 
-      limit, 
+      limit: limit * 2, 
       filter, 
       with_payload: true 
     });
 
-    if (!query) return vectorResults;
+    if (!query) return vectorResults.slice(0, limit);
 
+    // 2. Keyword (BM25) Search
     const textFilter = {
       must: [
-        ...(filter?.must || []),
+        ...filter.must,
         { key: "text", match: { text: query } }
       ]
     };
 
     const textResults = await this.client.scroll(this.collection, {
       filter: textFilter,
-      limit,
+      limit: limit * 2,
       with_payload: true
     });
 
-    const seenIds = new Set(vectorResults.map(r => r.id));
-    const merged = [...vectorResults];
+    // 3. Reciprocal Rank Fusion (RRF)
+    // Formula: score = sum( 1 / (k + rank) )
+    const scores: Record<string, { score: number; point: any }> = {};
 
-    for (const res of (textResults.points || [])) {
-      if (!seenIds.has(res.id)) {
-        merged.push({
-          id: res.id,
-          score: 0.5,
-          payload: res.payload,
-          version: 0
-        } as any);
-      }
-    }
+    const applyRRF = (results: any[], weight: number = 1.0) => {
+      results.forEach((res, index) => {
+        const id = res.id.toString();
+        const rank = index + 1;
+        if (!scores[id]) {
+          scores[id] = { score: 0, point: res };
+        }
+        scores[id].score += weight * (1 / (rrfK + rank));
+      });
+    };
 
-    return merged.slice(0, limit);
+    applyRRF(vectorResults);
+    applyRRF(textResults.points || []);
+
+    const merged = Object.values(scores)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(s => ({
+        ...s.point,
+        score: s.score // New RRF score
+      }));
+
+    return merged;
   }
 
-  async scrollAll(userId?: string): Promise<any[]> {
-    const filter = userId ? { must: [{ key: "userId", match: { value: userId } }] } : undefined;
+  async scrollAll(userId: string): Promise<any[]> {
+    const filter = { must: [{ key: "userId", match: { value: userId } }] };
     const allPoints: any[] = [];
-    let nextOffset: string | number | Record<string, unknown> | null | undefined = undefined;
+    let nextOffset: any = undefined;
 
     do {
       const response: any = await this.client.scroll(this.collection, {
         filter,
         limit: 100,
         with_payload: true,
-        offset: nextOffset ?? undefined,
+        offset: nextOffset,
       });
       allPoints.push(...response.points);
       nextOffset = response.next_page_offset;
@@ -96,7 +119,7 @@ export class StorageService {
     return allPoints;
   }
 
-  async storeBatch(points: { id: string, vector: number[], payload: any }[]) {
+  async storeBatch(points: any[]) {
     await this.client.upsert(this.collection, { points });
   }
 
@@ -105,9 +128,5 @@ export class StorageService {
       payload: partialPayload,
       points: [id]
     });
-  }
-
-  async updateAccessTime(id: string) {
-    await this.updatePayload(id, { last_accessed: Date.now() });
   }
 }
