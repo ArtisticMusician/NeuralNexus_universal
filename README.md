@@ -8,6 +8,21 @@
 
 ---
 
+## ⚡ One-Command Start (Easy Mode)
+
+Get the entire stack (Database + API + Dashboard + Proxy) running in 30 seconds.
+
+**Linux / Mac:**
+```bash
+chmod +x quickstart.sh
+./quickstart.sh
+```
+
+**Windows:**
+Double-click `quickstart.bat` or run it in CMD.
+
+---
+
 ## 🚀 Core Pillars
 
 - **Robust Hybrid Search**: Merges semantic vector similarity with keyword precision using Reciprocal Rank Fusion (RRF).
