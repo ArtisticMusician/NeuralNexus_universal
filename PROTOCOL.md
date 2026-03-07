@@ -23,7 +23,11 @@ Implementations MUST use **Reciprocal Rank Fusion (RRF)** to merge Vector and Ke
 - **RRF Formula**: $score = \sum_{rank \in R} \frac{1}{k + rank}$
 - Default $k = 60$.
 
-### 2.2 Strict Multi-Tenancy
+### 2.2 Semantic Deduplication
+- Implementations MUST perform semantic deduplication before storage.
+- If a new memory has a cosine similarity **>= 0.95** with an existing memory belonging to the same `userId`, the existing memory MUST be updated/merged instead of creating a duplicate.
+
+### 2.3 Strict Multi-Tenancy
 - Implementations MUST enforce mandatory `userId` filtering at the storage layer.
 - Searching across all users is prohibited to prevent data leaks.
 
