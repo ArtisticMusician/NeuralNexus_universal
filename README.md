@@ -26,6 +26,7 @@ Every aspect of Neural Nexus is documented in detail within the **[docs/](./docs
 - **[Troubleshooting](./docs/troubleshooting.md)**: Common issues, connection fixes, and native module solutions.
 
 ### 🔌 Integration & Usage
+- **[Quick Step-by-Step Guide](./docs/steps.md)**: Numbered instructions for all 5 connection methods.
 - **[Model Connection Guide](./docs/integrations.md)**: Detailed steps for OpenAI Proxy, MCP Server, Ollama, Claude, and more.
 - **[API Reference](./docs/api.md)**: Standardized REST endpoints for recall, storage, and administration.
 - **[TypeScript SDK](./packages/nexus-js)**: Integration for Node.js and Web applications.
