@@ -10,13 +10,14 @@
 
 ## ⚡ One-Command Start (Easy Mode)
 
-Get the entire stack (Database + API + Dashboard + Proxy) running in 30 seconds.
+Get the entire stack (API + Dashboard + Proxy) running in seconds.
 
 **Linux / Mac:**
 ```bash
 chmod +x quickstart.sh
 ./quickstart.sh
 ```
+*(Select **Option 1** for Native Mode to save system resources)*
 
 **Windows:**
 Double-click `quickstart.bat` or run it in CMD.
