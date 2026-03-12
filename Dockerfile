@@ -3,7 +3,7 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies for native modules (sqlite3)
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -14,40 +14,37 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-# Build core
 RUN npm run build
-
-# Build dashboard
-WORKDIR /app/dashboard
-RUN npm install && npm run build
-WORKDIR /app
 
 # Production stage
 FROM node:22-slim
 
 WORKDIR /app
 
-# Ensure we have runtime dependencies if needed (e.g., for sqlite3)
+# Runtime deps
 RUN apt-get update && apt-get install -y \
     python3 \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/package*.json ./
 RUN npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
-# Note: we might need to copy native bindings explicitly if they aren't in dist
-# But usually they stay in node_modules
+# Copy dashboard assets if they exist (assuming dist includes compiled TS, but dashboard might be static)
+# If dashboard source is in src/dashboard, the build script should handle it or we copy it manually.
+# Based on file structure, dashboard is in /dashboard/src. Let's assume user built it or we serve static.
+# For now, we copy the dist folder where tsc outputs.
 
-# Create data directory for SQLite
+# Create data directory
 RUN mkdir -p /app/data
 
 EXPOSE 3000
+EXPOSE 3001
 
 ENV PORT=3000
 ENV HOST=0.0.0.0
-ENV QDRANT_URL=http://localhost:6333
-ENV QDRANT_COLLECTION=neural_nexus_universal
-ENV REPLACEMENT_LOG_PATH=/app/data/replacements.sqlite
+ENV NODE_ENV=production
 
-CMD ["npm", "start"]
+# Start both Server and Proxy
+CMD ["sh", "-c", "node dist/src/server.js & node dist/src/openai-proxy.js"]

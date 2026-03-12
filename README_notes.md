@@ -22,7 +22,7 @@
 
 ## File: `src/core/EmbeddingService.ts`
 - **Imports**: `@xenova/transformers`.
-- **Function**: Manages the local embedding model using Transformers.js.
+- **Function**: Manages the local embedding model using Transformers.js. Generates vectors, counts tokens, and computes cosine similarity.
 - **Status**: **Functional**.
 
 ## File: `src/core/MemoryConsolidator.ts`
@@ -150,6 +150,21 @@
 - **Function**: Project manifest and script definitions.
 - **Status**: **Functional**.
 
+## File: `quickstart.sh` & `quickstart.bat`
+- **Imports**: Shell/Batch commands.
+- **Function**: Automates the environment setup, dependency checks, and system startup for Linux and Windows. Supports both Dockerized and Native (Docker-free) modes.
+- **Status**: **Functional**.
+
+## File: `docs/*.md`
+- **Imports**: Markdown.
+- **Function**: Exhaustive documentation hub containing 10+ detailed guides covering API specifications, integration steps, troubleshooting, and the formal NNMP protocol.
+- **Status**: **Functional**.
+
+## File: `Dockerfile` & `docker-compose.yml`
+- **Imports**: Docker images (Node, Qdrant).
+- **Function**: Defines the containerized environment for the core server and database services. Optimized for high-fidelity deployment.
+- **Status**: **Functional**.
+
 ---
 
 # Application Summary: Neural Nexus Universal
@@ -161,20 +176,20 @@ Neural Nexus Universal is a production-grade long-term memory system designed fo
 - **Hybrid Retrieval (RRF)**: Merges semantic vector results with keyword-based results to provide the highest relevance possible.
 - **Smart Context Refinement**: Automatically filters out redundant memories that overlap with the current conversation history.
 - **Time-Aware Decay**: Uses an exponential decay engine to ensure that older, unreinforced memories naturally surface less frequently than newer or highly-reinforced ones.
-- **Platform Agnostic**: accessible via REST API, MCP (Model Context Protocol), OpenAI Proxy, Telegram Bot, Browser Extension, and CLI.
+- **Platform Agnostic**: Accessible via REST API, MCP (Model Context Protocol), OpenAI Proxy, Telegram Bot, Browser Extension, and CLI.
 - **Intelligent Consolidation**: When new information conflicts with or overlaps with old information, it can use an LLM to merge them into a single, updated record.
-- **Privacy First**: local embedding generation means data doesn't have to leave the system for vectorization.
+- **One-Command Start**: Robust automation scripts (`quickstart.sh/bat`) handle the entire setup and launch process for the user.
+- **Documentation Hub**: A centralized `/docs` directory providing comprehensive technical and usage guidance.
 
 ## Analysis: Why it is a Strong Application
 - **Architectural Rigor**: The hub-and-spoke design around `NeuralNexusCore` is exceptionally clean. It follows SOLID principles, particularly SRP (Single Responsibility Principle), by delegating tasks like categorization and storage to specialized, injectable services.
 - **Interoperability**: By implementing the Model Context Protocol (MCP) and an OpenAI-compatible proxy, the app can be dropped into almost any modern AI agent stack without significant code changes.
 - **High Fidelity**: The implementation of Reciprocal Rank Fusion (RRF) for hybrid search shows a deep understanding of information retrieval challenges in RAG (Retrieval-Augmented Generation) systems.
-- **Developer Experience**: The inclusion of a comprehensive suite of "Fakes" and integration tests ensures that the system is stable and easy to extend.
+- **Ease of Use**: Recent infrastructure updates have significantly lowered the barrier to entry with automated environment management and clear troubleshooting guides.
 
 ## Potential Areas for Improvement
 - **Category Heuristics**: The regex-based `CategoryService` is fast but inherently limited. Moving to a small, fine-tuned local classifier model would improve accuracy for complex intents.
-- **Operational Complexity**: Managing Qdrant, the API server, the proxy, and potentially a Telegram bot requires significant infrastructure orchestration. Docker-compose helps, but it remains a multi-component system.
-
+- **Inconsistent Schema**: Some clients use `user_id` while others use `userId`. Standardizing on one throughout the codebase (already partially mitigated by server-side helpers) would improve maintainability.
 
 ## Final Verdict
-Neural Nexus Universal is an **excellent** architectural specimen of how long-term memory should be implemented for LLMs. It balances performance, privacy, and utility with a sophisticated retrieval engine that outperforms basic vector-search implementations.
+Neural Nexus Universal is an **excellent** architectural specimen of how long-term memory should be implemented for LLMs. It balances performance, privacy, and utility with a sophisticated retrieval engine and a professional-grade deployment infrastructure.
