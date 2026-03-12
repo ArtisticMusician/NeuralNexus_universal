@@ -53,11 +53,11 @@ export interface ClientOptions {
  */
 export class NeuralNexusClient {
   private api: AxiosInstance;
-  private defaultUserId?: string;
+  private defaultuserId?: string;
 
   constructor(options: ClientOptions = {}) {
     const baseUrl = (options.baseUrl || "http://localhost:3000").replace(/\/$/, "");
-    this.defaultUserId = options.userId;
+    this.defaultuserId = options.userId;
 
     this.api = axios.create({
       baseURL: baseUrl,
@@ -73,7 +73,7 @@ export class NeuralNexusClient {
    */
   async recall(request: RecallRequest): Promise<RecallResponse> {
     const payload = {
-      userId: this.defaultUserId,
+      userId: this.defaultuserId,
       ...request,
     };
     const response = await this.api.post<RecallResponse>("/recall", payload);
@@ -85,7 +85,7 @@ export class NeuralNexusClient {
    */
   async store(request: StoreRequest): Promise<{ status: string }> {
     const payload = {
-      userId: this.defaultUserId,
+      userId: this.defaultuserId,
       ...request,
     };
     const response = await this.api.post<{ status: string }>("/store", payload);
@@ -124,7 +124,7 @@ export class NeuralNexusClient {
    */
   async export(userId?: string): Promise<string> {
     const response = await this.api.get<string>("/admin/export", {
-      params: { userId: userId || this.defaultUserId },
+      params: { userId: userId || this.defaultuserId },
       responseType: "text",
     });
     return response.data;

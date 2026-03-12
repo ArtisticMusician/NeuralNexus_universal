@@ -153,18 +153,18 @@ server.addHook("onReady", async () => {
     server.log.info("Neural Nexus Core initialized");
 });
 
-// Helper to get user_id from header or body
-const getUserId = (request: any): string | undefined => {
-    const header = request.headers["user-id"] || request.headers["x-user-id"];
+// Helper to get userId from header or body
+const getuserId = (request: any): string | undefined => {
+    const header = request.headers["userId"] || request.headers["x-userId"];
     if (header) return Array.isArray(header) ? header[0] : header;
-    return request.body?.user_id || request.body?.userId;
+    return request.body?.userId || request.body?.userId;
 };
 
 // --- Endpoints ---
 
 server.post("/recall", async (request, reply) => {
     const body = request.body as any;
-    const userId = getUserId(request);
+    const userId = getuserId(request);
 
     if (!body.query) {
         return reply.status(400).send({ error: "query is required" });
@@ -182,7 +182,7 @@ server.post("/recall", async (request, reply) => {
 
 server.post("/store", async (request, reply) => {
     const body = request.body as any;
-    const userId = getUserId(request);
+    const userId = getuserId(request);
 
     if (!body.text) {
         return reply.status(400).send({ error: "text is required" });

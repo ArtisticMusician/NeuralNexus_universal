@@ -117,7 +117,7 @@ class StreamInterceptor extends Transform {
 
 server.post("/v1/chat/completions", async (request, reply) => {
     const body = request.body as any;
-    const userId = (request.headers["user-id"] || request.headers["x-user-id"]) as string;
+    const userId = (request.headers["userId"] || request.headers["x-userId"]) as string;
     const messages = body.messages || [];
 
     const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content;
@@ -132,7 +132,7 @@ server.post("/v1/chat/completions", async (request, reply) => {
                 }
 
                 const historyText = messages.map((m: any) => typeof m.content === 'string' ? m.content : '').join(" ").toLowerCase();
-                
+
                 // Use the new centralized refineContext method
                 const newMemories = await core.refineContext(recallRes.memories, historyText);
 

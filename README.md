@@ -51,7 +51,7 @@ Memories are not static. The engine calculates a `decayed_score` for every retri
 
 ## 🛠️ API Reference
 
-**Auth**: All endpoints require `X-API-Key` (if configured) and optionally `User-Id` (for multi-tenancy).
+**Auth**: All endpoints require `X-API-Key` (if configured) and optionally `UserId` (for multi-tenancy).
 
 ### `POST /recall`
 Search long-term memory.

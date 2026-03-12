@@ -54,7 +54,7 @@ describe('OpenAI Proxy (Fidelity Streaming Integration)', () => {
       method: 'POST',
       url: '/v1/chat/completions',
       payload: { stream: true, messages: [] },
-      headers: { 'user-id': 'user123' }
+      headers: { 'userId': 'user123' }
     });
 
     // 3. Push chunks into the stream
@@ -85,7 +85,7 @@ describe('OpenAI Proxy (Fidelity Streaming Integration)', () => {
     (core.recall as any).mockResolvedValue({
       memories: [memory1, memory2]
     });
-    
+
     // Mock refineContext to filter out the first memory (simulating Jaccard logic)
     (core.refineContext as any).mockResolvedValue([memory2]);
 
@@ -106,7 +106,7 @@ describe('OpenAI Proxy (Fidelity Streaming Integration)', () => {
         stream: true,
         messages: [{ role: 'user', content: 'Tell me about that uniquely crafted long sentence to test jaccard overlap specifically. It seems very interesting.' }]
       },
-      headers: { 'user-id': 'user123' }
+      headers: { 'userId': 'user123' }
     });
 
     // Verify the payload sent to OpenAI does NOT contain the first memory but DOES contain the second

@@ -35,7 +35,7 @@ Adjusts the "importance" of a memory manually.
 
 ## 3. Security Model
 - All traffic SHOULD be secured via `X-API-Key` headers.
-- Multi-tenancy MUST be supported via `user_id` partitioning.
+- Multi-tenancy MUST be supported via `userId` partitioning.
 
 ## 4. Portability
 - All NNMP-compliant servers MUST support export/import in **NDJSON** (Line-delimited JSON) format to prevent user lock-in.
