@@ -1,111 +1,111 @@
 <div align="center">
-  <img src="images/NeuralNexus_logo.svg" alt="Neural Nexus Logo" width="300" />
+  <p align="center">
+    <img src="images/NeuralNexus_logo.svg" alt="Neural Nexus Logo" width="350" />
+  </p>
+  <p align="center">
+    <strong>The professional-grade, framework-agnostic long-term memory protocol for AI agents.</strong>
+  </p>
+  <p align="center">
+    <a href="#-core-features">Features</a> •
+    <a href="#-quick-start">Quickstart</a> •
+    <a href="docs/">Documentation</a> •
+    <a href="#-the-ecosystem">Ecosystem</a> •
+    <a href="#-architecture">Architecture</a>
+  </p>
 </div>
 
-# 🧠 Neural Nexus: Universal AI Memory Protocol (NNMP)
+---
 
-**Neural Nexus** is a professional-grade, framework-agnostic long-term memory system. It provides a centralized "brain" for AI agents, decoupling memory from specific LLMs or frameworks (OpenClaw, LangChain, etc.) and making it accessible via a standardized API, CLI, Browser, Mobile, and SDKs.
+# 🧠 Neural Nexus: Universal AI Memory
+
+**Neural Nexus** is a centralized "brain" for your AI agents. It provides a standardized, high-performance interface for storing, retrieving, and maintaining facts, preferences, and decisions over time. 
+
+By decoupling memory from specific LLMs or frameworks (like LangChain or OpenClaw), Neural Nexus ensures your agents share a consistent, long-term context across every platform—API, CLI, Browser, and Mobile.
+
+## ✨ Core Features
+
+### 🔍 Hybrid RRF Retrieval
+Nexus uses **Reciprocal Rank Fusion (RRF)** to merge semantic vector similarity with traditional keyword precision. This ensures that whether you're searching for a vague concept or a specific serial number, you get the right result every time.
+
+### 📉 Temporal Decay Engine
+Memories aren't static. Our decay engine calculates relevance based on recency and strength. Unreinforced memories naturally fade, while frequently accessed information stays at the forefront of your agent's context.
+
+### 🛡️ Semantic Deduplication (Zero-Bloat)
+Stop "fact bloat" before it starts. When storing new information, Nexus checks for existing matches. If a new memory is **>= 0.95 similar** to an existing one, the records are **merged and reinforced** rather than duplicated.
+
+### 🔒 Privacy-First & Local-First
+Uses `@xenova/transformers` for **local embedding generation**. Your sensitive data doesn't need to leave your infrastructure for vectorization.
+
+### 🚀 One-Command Start
+Get a production-ready memory environment running in seconds with our automated `quickstart` system.
 
 ---
 
-## 🚀 Core Architecture & Logic
+## ⚡ Quick Start
 
-Neural Nexus operates on a multi-layered architecture: **Adapters → API Gateway → NeuralNexusCore → Specialized Services**.
+### 1. Prerequisites
+- **Node.js** (v18+)
+- **Qdrant** (Optional, but recommended. The quickstart will handle this for you!)
 
-### 1. Hybrid Search (Vector + Keyword)
-Nexus combines semantic understanding with keyword precision:
-- **Vector Search**: Cosine similarity using `Xenova/bge-small-en-v1.5` embeddings.
-- **BM25 Keyword Search**: Full-text indexing via Qdrant for precise retrieval of names, technical terms, and IDs.
-- **Merging**: Results are merged, ensuring the most relevant context is returned.
+### 2. Launch in 60 Seconds
+Clone the repo and run the automation script:
 
-### 2. Semantic Deduplication (The "No Bloat" Rule)
-When storing information, Nexus prevents "fact bloat" by checking similarity:
-- If a new memory is **>= 0.95 similar** to an existing one, the old memory is **updated** (merged) rather than duplicated.
-- The system automatically strengthens the existing memory and logs the change to the **Audit Trail**.
-
-### 3. The Decay Engine (Temporal Relevance)
-Memories are not static. The engine calculates a `decayed_score` for every retrieval:
-- **Formula**: `score * (1 / (1 + lambda * (now - last_accessed))) * strength`.
-- **Lambda**: Configurable per category (e.g., facts decay slower than preferences).
-- **Strength**: Manual reinforcement multiplier (default +0.05).
-
-### 4. Atomic Integrity & Safety
-- **Atomic Locking**: Uses `async-lock` to prevent race conditions during `store` and `reinforce` operations (locked per `userId` and `memoryId`).
-- **Token Budgeting**: Built-in `@xenova/transformers` AutoTokenizer ensures `/recall` responses never exceed your LLM's context window.
-
----
-
-## 🔌 The Ecosystem (Adapters)
-
-| Adapter | Technical Implementation | Features |
-|---------|-------------------------|----------|
-| **OpenAI Proxy** | `src/openai-proxy.ts` | Injects context into `/v1/chat/completions`, intercepts `store_memory` tool calls. |
-| **MCP Server** | `src/mcp.ts` | Native Model Context Protocol support for Claude Desktop. |
-| **CLI Manager** | `src/cli.ts` | Commander-based CLI (`nexus`) for recall, store, export, and import. |
-| **Telegram Bot** | `src/telegram-bot.ts` | Telegraf-based mobile agent for memory capture and retrieval. |
-| **Browser Ext** | `browser-extension/` | Manifest V3 extension with "Read-to-Remember" context menu. |
-| **Web Dashboard** | `dashboard/` | Vite + React UI for visual memory browsing and manual entry. |
-| **n8n Workflow** | `integrations/n8n/` | Pre-built workflow template for low-code automation. |
-
----
-
-## 🛠️ API Reference
-
-**Auth**: All endpoints require `X-API-Key` (if configured) and optionally `UserId` (for multi-tenancy).
-
-### `POST /recall`
-Search long-term memory.
-- **Body**: `{ query: string, limit?: number, userId?: string, maxTokens?: number }`
-- **Result**: Returns a list of `MemoryEntry` objects sorted by `decayed_score`.
-
-### `POST /store`
-Add or update memory.
-- **Body**: `{ text: string, category?: string, userId?: string, metadata?: object }`
-- **Categories**: `preference`, `fact`, `decision`, `entity`, `other`.
-
-### `POST /reinforce`
-Strengthen a memory.
-- **Body**: `{ memoryId: string, strengthAdjustment?: number }`
-
-### `GET /audit`
-Retrieve the replacement audit log (SQLite-backed).
-
-### `GET /admin/export` | `POST /admin/import`
-Export/Import memories in **NDJSON** (Line-delimited JSON) format for full data portability.
-
----
-
-## 📦 SDKs
-
-### TypeScript (@neural-nexus/sdk)
-```typescript
-import { NeuralNexusClient } from '@neural-nexus/sdk';
-const nexus = new NeuralNexusClient({ baseUrl: '...', apiKey: '...' });
-await nexus.store({ text: "User prefers Python", category: "preference" });
+**Linux / macOS:**
+```bash
+./quickstart.sh
 ```
 
-### Python (LangChain Adapter)
-```python
-from adapters.langchain_nexus import NeuralNexusClient, store_memory
-client = NeuralNexusClient(api_key="...")
-# Integrated as a LangChain Tool or standalone client.
+**Windows:**
+```batch
+quickstart.bat
 ```
+
+This will initialize your environment, check dependencies, and start the Core Server and OpenAI Proxy.
 
 ---
 
-## ⚙️ Configuration (.env)
+## 🔌 The Ecosystem
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | Main API server port. |
-| `OPENAI_PROXY_PORT` | `3001` | OpenAI-Compatible proxy port. |
-| `NEXUS_API_KEY` | - | Master API key for security. |
-| `QDRANT_URL` | `http://localhost:6333` | Vector database endpoint. |
-| `EMBEDDING_MODEL` | `Xenova/bge-small-en-v1.5` | Transformers.js model for embeddings. |
-| `REPLACEMENT_LOG_PATH` | `./data/replacements.sqlite` | SQLite audit trail path. |
+Neural Nexus isn't just a server; it's a complete memory ecosystem.
+
+| Interface | Description |
+| :--- | :--- |
+| **OpenAI Proxy** | A transparent proxy that injects memories into chat contexts and intercepts tool calls in real-time streams. |
+| **MCP Server** | Native **Model Context Protocol** support for immediate integration with Claude Desktop and other MCP clients. |
+| **Mobile Bot** | A Telegraf-based **Telegram Bot** for capturing and recalling memories on the go. |
+| **Browser Ext** | A Manifest V3 extension with "Read-to-Remember" context menu support. |
+| **Web Dashboard** | A Vite + React dashboard for visual browsing and management of your agent's brain. |
+| **CLI Manager** | A powerful CLI tool (`nexus`) for bulk operations, imports, and exports. |
+
+---
+
+## 📚 Documentation
+
+Our [**Documentation Hub**](docs/) contains exhaustive guides for every aspect of the system:
+
+- 🛠️ [**Setup Guide**](docs/setup.md): Detailed installation and environment configuration.
+- 📡 [**API Reference**](docs/api.md): Full documentation of all REST endpoints.
+- 🤖 [**Integrations**](docs/integrations.md): How to connect to OpenAI, Claude, LangChain, and more.
+- 📜 [**NNMP Protocol**](docs/protocol.md): The formal specification of the Neural Nexus Memory Protocol.
+- 🔍 [**Technical Audit**](docs/technical_audit.md): Deep dive into the search math and engine logic.
+
+---
+
+## 🏗️ Architecture
+
+Neural Nexus follows a strict hub-and-spoke design centered around the `NeuralNexusCore`.
+
+1. **Adapters**: The entry points (Proxy, MCP, Bot).
+2. **NeuralNexusCore**: The orchestrator handling atomicity, deduplication, and budgeting.
+3. **Specialized Services**:
+   - **StorageService**: High-fidelity Qdrant wrapper.
+   - **EmbeddingService**: Local Transformers.js model management.
+   - **CategoryService**: Heuristic-based intent detection.
+   - **DecayEngine**: Mathematical relevance scoring.
 
 ---
 
 ## ⚖️ License
+
 **Neural Nexus Universal License (Personal & Non-Commercial)**
-Free for personal, educational, and internal use. Commercial use, monetization, or selling as a service is strictly prohibited without written consent. See `LICENSE.md` for details.
+Free for personal use, education, and internal prototyping. Commercial use or redistribution as a service is prohibited without written consent. See `LICENSE.md` for full terms.
