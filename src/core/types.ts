@@ -24,13 +24,21 @@ export interface RecallRequest {
 
 export interface RecallResponse {
   memories: MemoryEntry[];
+  metadata?: {
+    search_type: "hybrid" | "vector";
+    threshold_applied: number;
+    countBeforeFiltering: number;
+  };
 }
+
+export type MergeStrategy = "recompute" | "average" | "replace";
 
 export interface StoreRequest {
   text: string;
   category?: MemoryCategory;
   userId?: string;
   metadata?: Record<string, any>;
+  mergeStrategy?: MergeStrategy;
 }
 
 export interface ReinforceRequest {

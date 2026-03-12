@@ -67,9 +67,6 @@ describe('EmbeddingService', () => {
       input_ids: { size: 3 },
     });
     
-    // We need to set tokenizer AFTER initialize would have been called if we want to test the flow
-    // but initialize in the real code sets this.tokenizer.
-    // So we can mock initialize to set the tokenizer.
     mockInitialize.mockImplementation(async () => {
       (embeddingService as any).tokenizer = mockTokenizer;
     });
@@ -81,4 +78,3 @@ describe('EmbeddingService', () => {
     expect(count).toBe(3);
   });
 });
-

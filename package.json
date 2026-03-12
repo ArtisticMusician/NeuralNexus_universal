@@ -14,7 +14,8 @@
     "proxy:start": "node dist/src/openai-proxy.js",
     "telegram:start": "node dist/src/telegram-bot.js",
     "sdk:build": "cd packages/nexus-js && npm run build",
-    "build": "tsc",
+    "dashboard:build": "cd dashboard && npm install && npm run build",
+    "build": "tsc && npm run dashboard:build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

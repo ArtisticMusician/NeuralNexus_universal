@@ -22,18 +22,13 @@ describe('DecayEngine', () => {
 
   it('applies exponential decay when lambda > 0', () => {
     const score = 1.0;
-    const lastAccessed = Date.now() - 1000; // 1 second ago
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    const lastAccessed = Date.now() - oneDayMs; // 1 day ago
     const lambda = 0.5;
     const strength = 1.0;
-    
-    // Formula: (originalScore * strength) * Math.exp(-lambda * deltaT)
-    // deltaT is in ms, so 1000ms
-    // score = 1 * exp(-0.5 * 1000) -> this lambda in the plugin is very small, 
-    // let's check the plugin's index.ts for typical lambda values.
-    // fact: 1e-10
-    
-    const result = decayEngine.calculateScore(score, lastAccessed, lambda, strength);
-    expect(result).toBe(score * strength * Math.exp(-lambda * 1000));
+
+    const result = decayEngine.calculateScore(score, lastAccessed, lambda, strength, 'days');
+    expect(result).toBeCloseTo(score * strength * Math.exp(-lambda * 1));
   });
 
   it('uses default strength of 1 if not provided', () => {
@@ -45,13 +40,14 @@ describe('DecayEngine', () => {
 
   it('decays more over longer time', () => {
     const score = 1.0;
-    const lambda = 1e-5;
+    const lambda = 0.1;
     const now = Date.now();
-    
-    const score1 = decayEngine.calculateScore(score, now - 1000, lambda);
-    const score2 = decayEngine.calculateScore(score, now - 2000, lambda);
-    
+    const oneDay = 24 * 60 * 60 * 1000;
+
+    // Test with 1 day vs 2 days
+    const score1 = decayEngine.calculateScore(score, now - oneDay, lambda, 1, 'days');
+    const score2 = decayEngine.calculateScore(score, now - (oneDay * 2), lambda, 1, 'days');
+
     expect(score1).toBeGreaterThan(score2);
   });
 });
-

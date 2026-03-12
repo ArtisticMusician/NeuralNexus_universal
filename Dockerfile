@@ -14,7 +14,13 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
+# Build core
 RUN npm run build
+
+# Build dashboard
+WORKDIR /app/dashboard
+RUN npm install && npm run build
+WORKDIR /app
 
 # Production stage
 FROM node:22-slim

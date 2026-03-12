@@ -1,57 +1,144 @@
-import { Telegraf } from 'telegraf';
+import { Telegraf, Markup } from 'telegraf';
+import { NeuralNexusCore } from './core/NeuralNexusCore.js';
+import { core as defaultCore } from './server.js';
 import axios from 'axios';
 import 'dotenv/config';
 
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN || '');
-const NEXUS_API_URL = process.env.API_URL || 'http://localhost:3000';
-const NEXUS_API_KEY = process.env.NEXUS_API_KEY;
+export function createTelegramBot(core: NeuralNexusCore) {
+  const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN || '');
+  const API_URL = process.env.API_URL || 'http://localhost:3000';
 
-const api = axios.create({
-  baseURL: NEXUS_API_URL,
-  headers: NEXUS_API_KEY ? { 'X-API-Key': NEXUS_API_KEY } : {}
-});
+  // Per-user pending category state:
+  // After tapping "Store as preference", the next plain message is stored under that category.
+  const pendingCategory = new Map<number, string>();
 
-// Command: /start
-bot.start((ctx) => ctx.reply('Welcome to your Neural Nexus Mobile Agent! Send me anything to remember, or use /recall <query> to search.'));
+  const getCategories = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/categories`);
+      return res.data.categories as string[];
+    } catch {
+      return ['fact', 'preference', 'entity', 'decision']; // fallback
+    }
+  };
 
-// Command: /recall <query>
-bot.command('recall', async (ctx) => {
-  const query = ctx.message.text.replace('/recall', '').trim();
-  if (!query) return ctx.reply('Please provide a query: /recall <query>');
+  // Command: /start
+  bot.start(async (ctx) => {
+    const categories = await getCategories();
+    ctx.reply(
+      'Welcome to your Neural Nexus Mobile Agent! Send me anything to remember, or use /recall <query> to search.',
+      Markup.keyboard([
+        ['/recall', '/categories'],
+        ...categories.map(c => [`Store as ${c}`]).reduce((acc: any[], curr, i) => {
+          if (i % 2 === 0) acc.push([curr[0]]);
+          else acc[acc.length - 1].push(curr[0]);
+          return acc;
+        }, [])
+      ]).resize()
+    );
+  });
 
-  try {
-    const res = await api.post(`/recall`, { query, limit: 3 });
-    const memories = res.data.memories;
+  bot.command('categories', async (ctx) => {
+    const categories = await getCategories();
+    ctx.reply(`Available categories: ${categories.join(', ')}`);
+  });
 
-    if (!memories || memories.length === 0) {
-      return ctx.reply('No relevant memories found.');
+  // Command: /recall <query>
+  bot.command('recall', async (ctx) => {
+    const query = ctx.message.text.replace('/recall', '').trim();
+    if (!query) return ctx.reply('Please provide a query: /recall <query>');
+
+    try {
+      const userId = `telegram:${ctx.from.id}`;
+      const res = await core.recall({ query, limit: 3, userId });
+      const memories = res.memories;
+
+      if (!memories || memories.length === 0) {
+        return ctx.reply('No relevant memories found.');
+      }
+
+      const reply = memories.map((m: any) => `📌 [${m.category}] ${m.text}`).join('\n\n');
+      ctx.reply(`🧠 Found these relevant memories:\n\n${reply}`);
+    } catch (err: any) {
+      ctx.reply(`❌ Error: ${err.message}`);
+    }
+  });
+
+  // Any other message: Store it (with category awareness)
+  bot.on('text', async (ctx) => {
+    const text = ctx.message.text;
+    if (text.startsWith('/')) return; // Ignore other commands
+
+    const userId = `telegram:${ctx.from.id}`;
+
+    // ──────────────────────────────────────────────
+    // 1. Check whether the message matches a "Store as <category>" button press,
+    //    optionally followed by ": <content>" for single-message storage.
+    //    Examples:
+    //      "Store as preference"                → sets pending category
+    //      "Store as preference: I like coffee"  → stores immediately
+    // ──────────────────────────────────────────────
+    const storeMatch = text.match(/^Store as (\w+)(?::\s*(.+))?$/is);
+    if (storeMatch) {
+      const category = storeMatch[1].toLowerCase();
+      const inlineContent = storeMatch[2]?.trim();
+
+      if (inlineContent) {
+        // "Store as preference: I like coffee" → store right away
+        try {
+          await core.store({ text: inlineContent, userId, category });
+          return ctx.reply(`✅ Saved to long-term memory as "${category}".`);
+        } catch (err: any) {
+          return ctx.reply(`❌ Failed to store: ${err.message}`);
+        }
+      }
+
+      // Bare button tap ("Store as preference") → remember category for next message
+      pendingCategory.set(ctx.from.id, category);
+      return ctx.reply(
+        `📁 Category set to "${category}". Now send me the text you'd like to remember.`
+      );
     }
 
-    const reply = memories.map((m: any) => `📌 [${m.category}] ${m.text}`).join('\n\n');
-    ctx.reply(`🧠 Found these relevant memories:\n\n${reply}`);
-  } catch (err: any) {
-    ctx.reply(`❌ Error: ${err.message}`);
-  }
-});
+    // ──────────────────────────────────────────────
+    // 2. If a category was previously selected via button, apply it now.
+    // ──────────────────────────────────────────────
+    const category = pendingCategory.get(ctx.from.id);
+    if (category) {
+      pendingCategory.delete(ctx.from.id);
+      try {
+        await core.store({ text, userId, category });
+        return ctx.reply(`✅ Saved to long-term memory as "${category}".`);
+      } catch (err: any) {
+        return ctx.reply(`❌ Failed to store: ${err.message}`);
+      }
+    }
 
-// Any other message: Store it
-bot.on('text', async (ctx) => {
-  const text = ctx.message.text;
-  if (text.startsWith('/')) return; // Ignore other commands
+    // ──────────────────────────────────────────────
+    // 3. Default: no category specified — let the core auto-classify.
+    // ──────────────────────────────────────────────
+    try {
+      await core.store({ text, userId });
+      ctx.reply('✅ Saved to long-term memory.');
+    } catch (err: any) {
+      ctx.reply(`❌ Failed to store: ${err.message}`);
+    }
+  });
 
-  try {
-    await api.post(`/store`, { text, category: 'fact' });
-    ctx.reply('✅ Saved to long-term memory.');
-  } catch (err: any) {
-    ctx.reply(`❌ Failed to store: ${err.message}`);
-  }
-});
+  return bot;
+}
 
-// Start the bot
-bot.launch().then(() => {
+export const start = async () => {
+  await defaultCore.initialize();
+  const bot = createTelegramBot(defaultCore);
+  bot.launch();
   console.log('Mobile Agent (Telegram Bot) is active.');
-});
 
-// Enable graceful stop
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+  // Enable graceful stop
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+};
+
+// Start if executed directly
+if (import.meta.url.endsWith(process.argv[1])) {
+  start();
+}

@@ -66,4 +66,17 @@ export class EmbeddingService {
   getDim() {
     return this.dimension;
   }
+
+  cosineSimilarity(v1: number[], v2: number[]): number {
+    if (v1.length !== v2.length) return 0;
+    let dot = 0;
+    let norm1 = 0;
+    let norm2 = 0;
+    for (let i = 0; i < v1.length; i++) {
+      dot += v1[i] * v2[i];
+      norm1 += v1[i] * v1[i];
+      norm2 += v2[i] * v2[i];
+    }
+    return dot / (Math.sqrt(norm1) * Math.sqrt(norm2) || 1);
+  }
 }

@@ -89,4 +89,3 @@ describe('config', () => {
     expect(config.qdrant.url).toBe('http://localhost:6333'); // Reverts to default if after resolving it's empty
   });
 });
-

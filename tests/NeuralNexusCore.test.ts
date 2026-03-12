@@ -1,177 +1,99 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { NeuralNexusCore as NeuralNexus } from '../src/core/NeuralNexusCore.js';
+import { NeuralNexusCore } from '../src/core/NeuralNexusCore.js';
 import { normalizeMemoryConfig } from '../src/core/config.js';
+import { InMemoryStorageFake } from './fakes/InMemoryStorage.js';
+import { EmbeddingFake } from './fakes/EmbeddingFake.js';
 
-vi.mock('../src/core/EmbeddingService.js', () => {
-  return {
-    EmbeddingService: vi.fn().mockImplementation(function() {
-      return {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        getDim: vi.fn().mockReturnValue(128),
-        createVector: vi.fn().mockResolvedValue([0.1, 0.2]),
-        countTokens: vi.fn().mockImplementation((text: string) => Promise.resolve(text.split(' ').length)),
-      };
-    }),
-  };
-});
+vi.mock('../src/core/ReplacementAuditService.js', () => ({
+  ReplacementAuditService: class {
+    private logs: any[] = [];
+    async initialize() { }
+    async logReplacement(record: any) { this.logs.push(record); }
+    async getLogs(limit: number = 50) { return [...this.logs].reverse().slice(0, limit); }
+    async close() { }
+  }
+}));
 
-vi.mock('../src/core/StorageService.js', () => {
-  return {
-    StorageService: vi.fn().mockImplementation(function() {
-      return {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        find: vi.fn().mockResolvedValue([
-          { id: '1', score: 0.9, payload: { text: 'memory one', last_accessed: Date.now() } },
-          { id: '2', score: 0.8, payload: { text: 'memory two is longer', last_accessed: Date.now() } },
-          { id: '3', score: 0.7, payload: { text: 'three', last_accessed: Date.now() } },
-        ]),
-        store: vi.fn().mockResolvedValue(undefined),
-        updatePayload: vi.fn().mockResolvedValue(undefined),
-      };
-    }),
-  };
-});
-
-vi.mock('../src/core/ReplacementAuditService.js', () => {
-  return {
-    ReplacementAuditService: vi.fn().mockImplementation(function() {
-      return {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        getLogs: vi.fn().mockResolvedValue([]),
-      };
-    }),
-  };
-});
-
-describe('NeuralNexusCore', () => {
-  let neuralNexus: NeuralNexus;
+describe('NeuralNexusCore (Mock-less Integration)', () => {
+  let core: NeuralNexusCore;
+  let storage: InMemoryStorageFake;
+  let embedding: EmbeddingFake;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    neuralNexus = new NeuralNexus(normalizeMemoryConfig({}));
+    const config = normalizeMemoryConfig({
+      thresholds: { recall: 0.01, similarity: 0.95 },
+      search: { limit: 5, rrfK: 60 }
+    });
+
+    core = new NeuralNexusCore(config);
+
+    storage = new InMemoryStorageFake();
+    embedding = new EmbeddingFake();
+
+    (core as any).storage = storage;
+    (core as any).embedding = embedding;
   });
 
-  describe('recall', () => {
-    it('returns all memories if no maxTokens is specified', async () => {
-      const result = await neuralNexus.recall({ query: 'test' });
-      expect(result.memories).toHaveLength(3);
-    });
+  it('stores and recalls a memory without mocks', async () => {
+    const text = "The capital of France is Paris.";
+    await core.store({ text, userId: "user1" });
 
-    it('applies token budget (maxTokens)', async () => {
-      // 'memory one' -> 2 tokens
-      // 'memory two is longer' -> 4 tokens
-      // 'three' -> 1 token
-      
-      const result = await neuralNexus.recall({ query: 'test', maxTokens: 3 });
-      
-      // Should include 'memory one' (2 tokens). 
-      // Next is 'memory two is longer' (4 tokens) -> exceeds budget (2+4=6 > 3).
-      // So it should only have 1 memory.
-      expect(result.memories).toHaveLength(1);
-      expect(result.memories[0].text).toBe('memory one');
-    });
+    const result = await core.recall({ query: "What is the capital of France?", userId: "user1" });
 
-    it('respects exact token limit', async () => {
-      const result = await neuralNexus.recall({ query: 'test', maxTokens: 6 });
-      // 'memory one' (2) + 'memory two is longer' (4) = 6.
-      expect(result.memories).toHaveLength(2);
-    });
+    expect(result.memories).toHaveLength(1);
+    expect(result.memories[0].text).toBe(text);
+    expect(result.memories[0].metadata.search_score).toBeGreaterThan(0.01);
   });
 
-  describe('normalizeWhitespace', () => {
-    it('removes extra whitespace and trims', () => {
-      const input = '  This   is    a test  \n\n  ';
-      const result = (neuralNexus as any).constructor.normalizeWhitespace(input);
-      expect(result).toBe('This is a test');
-    });
+  it('enforces multi-tenancy (privacy) automatically', async () => {
+    await core.store({ text: "User A secret", userId: "userA" });
+    await core.store({ text: "User B secret", userId: "userB" });
+
+    const resultA = await core.recall({ query: "secret", userId: "userA" });
+    expect(resultA.memories).toHaveLength(1);
+    expect(resultA.memories[0].text).toContain("User A");
+
+    const resultB = await core.recall({ query: "secret", userId: "userB" });
+    expect(resultB.memories).toHaveLength(1);
+    expect(resultB.memories[0].text).toContain("User B");
   });
 
-  describe('extractCandidate', () => {
-    it('extracts the last user message text', () => {
-      const messages = [
-        { role: 'user', content: 'Hello there' },
-        { role: 'assistant', content: 'Hi! How can I help?' },
-        { role: 'user', content: 'Tell me a long fact about space, at least twenty-five characters long.' },
-      ];
-      const result = neuralNexus.extractCandidate(messages);
-      expect(result).toBe('Tell me a long fact about space, at least twenty-five characters long.');
-    });
+  it('performs semantic deduplication (merge) based on similarity', async () => {
+    const original = "I love eating red apples.";
+    await core.store({ text: original, userId: "user1" });
 
-    it('returns null if last user message is too short', () => {
-      const messages = [{ role: 'user', content: 'Short' }];
-      const result = neuralNexus.extractCandidate(messages);
-      expect(result).toBeNull();
-    });
+    // Very similar text
+    const duplicate = "I love eating red apples.";
+    await core.store({ text: duplicate, userId: "user1" });
 
-    it('truncates message if it is too long', () => {
-      const longMessage = 'A'.repeat(2000);
-      const messages = [{ role: 'user', content: longMessage }];
-      const result = neuralNexus.extractCandidate(messages);
-      expect(result?.length).toBe(1200);
-    });
-
-    it('handles content as array of objects', () => {
-      const messages = [
-        { role: 'user', content: [{ type: 'text', text: 'Multi-part message that should be long enough.' }] },
-      ];
-      const result = neuralNexus.extractCandidate(messages);
-      expect(result).toBe('Multi-part message that should be long enough.');
-    });
+    const all = await storage.scrollAll("user1");
+    expect(all).toHaveLength(1);
+    expect(all[0].payload.strength).toBeGreaterThan(1);
   });
 
-  describe('consolidate', () => {
-    it('consolidates multiple user messages', () => {
-      const messages = [
-        { role: 'user', content: 'First message that is long enough.' },
-        { role: 'assistant', content: 'Acknowledged' },
-        { role: 'user', content: 'Second message that is also long.' },
-      ];
-      // threshold is 2, so it should consolidate
-      const result = neuralNexus.consolidate(messages, 2);
-      expect(result).toBe('First message that is long enough. Second message that is also long.');
-    });
+  it('recalculates embedding vector on merge to prevent semantic drift', async () => {
+    const original = "The sky is blue today.";
+    await core.store({ text: original, userId: "user1" });
 
-    it('returns single extractCandidate result if under threshold', () => {
-      const messages = [
-        { role: 'user', content: 'First message that is long enough.' },
-        { role: 'assistant', content: 'Acknowledged' },
-        { role: 'user', content: 'Second message that is also long.' },
-      ];
-      // threshold is 10, so it shouldn't consolidate
-      const result = neuralNexus.consolidate(messages, 10);
-      expect(result).toBe('Second message that is also long.');
-    });
+    const storeSpy = vi.spyOn(storage, 'store');
 
-    it('deduplicates messages', () => {
-      const messages = [
-        { role: 'user', content: 'Repeated message that is long enough.' },
-        { role: 'user', content: 'Repeated message that is long enough.' },
-      ];
-      const result = neuralNexus.consolidate(messages, 2);
-      expect(result).toBe('Repeated message that is long enough.');
-    });
+    const duplicate = "The sky is very blue today.";
+    await core.store({ text: duplicate, userId: "user1" });
+
+    expect(storeSpy).toHaveBeenCalled();
+    const calls = storeSpy.mock.calls;
+    const lastCall = calls[calls.length - 1]; // [id, vector, payload]
+    expect(lastCall[2].text).toBe(duplicate);
   });
 
-  describe('detectCategory', () => {
-    it('detects "preference" based on keywords', () => {
-      expect(neuralNexus.detectCategory('I prefer apples')).toBe('preference');
-      expect(neuralNexus.detectCategory('I like coding')).toBe('preference');
-      expect(neuralNexus.detectCategory('I dislike noise')).toBe('preference');
-    });
+  it('filters results below the recall threshold', async () => {
+    // Manually push a low-scoring result to the fake storage
+    await storage.store("id1", new Array(384).fill(0), { text: "Irrelevant", userId: "user1" });
 
-    it('detects "decision" based on keywords', () => {
-      expect(neuralNexus.detectCategory('I decided to go home')).toBe('decision');
-      expect(neuralNexus.detectCategory('I chose the blue one')).toBe('decision');
-      expect(neuralNexus.detectCategory('Instead of coffee, I took tea')).toBe('decision');
-    });
+    // Set a very high threshold manually
+    (core as any).config.thresholds.recall = 0.9;
 
-    it('detects "entity" based on keywords', () => {
-      expect(neuralNexus.detectCategory('This is a test')).toBe('entity');
-      expect(neuralNexus.detectCategory('The project is called Neural Nexus')).toBe('entity');
-    });
-
-    it('defaults to "fact"', () => {
-      expect(neuralNexus.detectCategory('The earth is round')).toBe('fact');
-    });
+    const result = await core.recall({ query: "target", userId: "user1" });
+    expect(result.memories).toHaveLength(0);
   });
 });

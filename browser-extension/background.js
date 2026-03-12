@@ -12,12 +12,30 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
+async function getSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['apiUrl', 'apiKey'], (result) => {
+      resolve({
+        apiUrl: result.apiUrl || "http://localhost:3000",
+        apiKey: result.apiKey || ""
+      });
+    });
+  });
+}
+
 async function saveToNexus(text) {
-  const API_URL = "http://localhost:3000/store";
+  const settings = await getSettings();
+  const endpoint = `${settings.apiUrl.replace(/\/$/, "")}/store`;
+  
   try {
-    const response = await fetch(API_URL, {
+    const headers = { "Content-Type": "application/json" };
+    if (settings.apiKey) {
+      headers["X-API-Key"] = settings.apiKey;
+    }
+
+    const response = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ 
         text, 
         category: "fact",
@@ -27,7 +45,8 @@ async function saveToNexus(text) {
     
     if (response.ok) {
       console.log("Memory stored successfully!");
-      // Optional: Send message to content script to show a toast
+    } else {
+      console.error("Server responded with error:", response.status);
     }
   } catch (err) {
     console.error("Failed to save to Neural Nexus:", err);

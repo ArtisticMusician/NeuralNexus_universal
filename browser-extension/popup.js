@@ -1,4 +1,30 @@
-const API_URL = "http://localhost:3000";
+async function getSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['apiUrl', 'apiKey'], (result) => {
+      resolve({
+        apiUrl: result.apiUrl || "http://localhost:3000",
+        apiKey: result.apiKey || ""
+      });
+    });
+  });
+}
+
+async function requestNexus(endpoint, options = {}) {
+  const settings = await getSettings();
+  const baseUrl = settings.apiUrl.replace(/\/$/, "");
+  const headers = { 
+    "Content-Type": "application/json",
+    ...(settings.apiKey ? { "X-API-Key": settings.apiKey } : {})
+  };
+
+  const response = await fetch(`${baseUrl}/${endpoint}`, {
+    ...options,
+    headers: { ...headers, ...options.headers }
+  });
+  
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
 
 document.getElementById('searchBtn').addEventListener('click', async () => {
   const query = document.getElementById('query').value;
@@ -6,12 +32,10 @@ document.getElementById('searchBtn').addEventListener('click', async () => {
   resultsDiv.innerHTML = 'Searching...';
 
   try {
-    const response = await fetch(`${API_URL}/recall`, {
+    const data = await requestNexus('recall', {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, limit: 3 })
     });
-    const data = await response.json();
     
     resultsDiv.innerHTML = data.memories.map(m => `
       <div class="memory">
@@ -19,7 +43,7 @@ document.getElementById('searchBtn').addEventListener('click', async () => {
       </div>
     `).join('') || 'No memories found.';
   } catch (err) {
-    resultsDiv.innerHTML = 'Error connecting to Nexus.';
+    resultsDiv.innerHTML = 'Error connecting to Nexus. Check settings.';
   }
 });
 
@@ -28,16 +52,27 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   if (!text) return;
 
   try {
-    const response = await fetch(`${API_URL}/store`, {
+    await requestNexus('store', {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, category: "fact" })
     });
-    if (response.ok) {
-      document.getElementById('manualText').value = '';
-      alert('Memory saved!');
-    }
+    document.getElementById('manualText').value = '';
+    alert('Memory saved!');
   } catch (err) {
     alert('Error saving memory.');
   }
 });
+
+// Settings Management UI (simple version)
+const toggleBtn = document.createElement('button');
+toggleBtn.textContent = 'Settings';
+toggleBtn.style.marginTop = '10px';
+toggleBtn.onclick = () => {
+  const url = prompt('API URL', 'http://localhost:3000');
+  const key = prompt('API Key (if any)');
+  if (url !== null) {
+    chrome.storage.local.set({ apiUrl: url, apiKey: key || '' });
+    alert('Settings saved!');
+  }
+};
+document.body.appendChild(toggleBtn);

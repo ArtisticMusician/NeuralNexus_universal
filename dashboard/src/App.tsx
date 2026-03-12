@@ -13,10 +13,32 @@ const api = axios.create({
 function App() {
   const [query, setQuery] = useState('');
   const [memories, setMemories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(['fact', 'preference', 'entity', 'decision', 'other']);
   const [loading, setLoading] = useState(false);
   const [isStoreOpen, setIsStoreOpen] = useState(false);
+  const [toasts, setToasts] = useState<{id: number, msg: string, type: 'error' | 'success'}[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
+  const [lastResponse, setLastResponse] = useState<any>(null);
   const [newText, setNewText] = useState('');
   const [newCategory, setNewCategory] = useState('fact');
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await api.get('/categories');
+        if (res.data.categories) setCategories(res.data.categories);
+      } catch (err) {
+        console.warn('Failed to fetch categories, using defaults');
+      }
+    };
+    fetchCategories();
+  }, []);
+
+  const addToast = (msg: string, type: 'error' | 'success' = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+  };
 
   const handleRecall = async () => {
     if (!query) return;
@@ -24,7 +46,9 @@ function App() {
     try {
       const res = await api.post(`/recall`, { query, limit: 12 });
       setMemories(res.data.memories);
-    } catch (err) {
+      setLastResponse(res.data);
+    } catch (err: any) {
+      addToast(err.response?.data?.error || err.message || 'Recall failed', 'error');
       console.error(err);
     } finally {
       setLoading(false);
@@ -34,45 +58,68 @@ function App() {
   const handleStore = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post(`/store`, { text: newText, category: newCategory });
+      const res = await api.post(`/store`, { text: newText, category: newCategory });
       setNewText('');
       setIsStoreOpen(false);
       setQuery(newText);
+      addToast('Memory stored successfully', 'success');
+      setLastResponse(res.data);
       handleRecall();
-    } catch (err) {
+    } catch (err: any) {
+      addToast(err.response?.data?.error || err.message || 'Store failed', 'error');
       console.error(err);
     }
   };
 
   return (
     <div className="dashboard-container">
+      {/* Toast Container */}
+      <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {toasts.map(t => (
+          <div key={t.id} style={{ background: t.type === 'error' ? '#ef4444' : '#10b981', color: 'white', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+            {t.msg}
+          </div>
+        ))}
+      </div>
+
       <header>
         <div className="title">
           <BrainCircuit size={32} />
           <span>Neural Nexus Universal</span>
         </div>
-        <button onClick={() => setIsStoreOpen(!isStoreOpen)}>
-          <Plus size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
-          Store New Memory
-        </button>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button onClick={() => setShowDebug(!showDebug)} style={{ background: '#334155' }}>
+            {showDebug ? 'Hide Debug' : 'Show Debug'}
+          </button>
+          <button onClick={() => setIsStoreOpen(!isStoreOpen)}>
+            <Plus size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+            Store New Memory
+          </button>
+        </div>
       </header>
+
+      {showDebug && lastResponse && (
+        <div style={{ background: '#0f172a', border: '1px solid #334155', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem', fontSize: '0.8rem', overflow: 'auto', maxHeight: '300px' }}>
+          <h4 style={{ marginTop: 0 }}>Recent API Response</h4>
+          <pre style={{ margin: 0 }}>{JSON.stringify(lastResponse, null, 2)}</pre>
+        </div>
+      )}
 
       {isStoreOpen && (
         <form onSubmit={handleStore} style={{ marginBottom: '2rem', padding: '1.5rem', background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155' }}>
           <div style={{ marginBottom: '1rem' }}>
             <label>Category</label>
             <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)}>
-              <option value="fact">Fact</option>
-              <option value="preference">Preference</option>
-              <option value="entity">Entity</option>
-              <option value="decision">Decision</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+              ))}
             </select>
           </div>
           <div style={{ marginBottom: '1rem' }}>
             <label>Memory Text</label>
-            <textarea 
-              rows={4} 
-              value={newText} 
+            <textarea
+              rows={4}
+              value={newText}
               onChange={(e) => setNewText(e.target.value)}
               placeholder="What should I remember?"
             />
@@ -84,9 +131,9 @@ function App() {
       <div className="search-section">
         <div style={{ position: 'relative', flex: 1 }}>
           <Search size={20} style={{ position: 'absolute', left: '12px', top: '14px', color: '#94a3b8' }} />
-          <input 
-            type="text" 
-            placeholder="Search your memories..." 
+          <input
+            type="text"
+            placeholder="Search your memories..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleRecall()}

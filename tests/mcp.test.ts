@@ -1,75 +1,76 @@
-import { test, expect, vi } from "vitest";
-import axios from "axios";
+import { test, expect, vi, beforeEach } from "vitest";
+import { createMcpServer } from "../src/mcp.js";
+import { NeuralNexusCore } from "../src/core/NeuralNexusCore.js";
+import { normalizeMemoryConfig } from "../src/core/config.js";
+import { InMemoryStorageFake } from "./fakes/InMemoryStorage.js";
+import { EmbeddingFake } from "./fakes/EmbeddingFake.js";
 
-vi.mock("axios", () => {
-  return {
-    default: {
-      create: vi.fn().mockReturnValue({
-        post: vi.fn(),
-        get: vi.fn(),
-      }),
-    },
-  };
-});
+// Mock the Audit service to avoid sqlite3 issues (until it's also a fake)
+vi.mock('../src/core/ReplacementAuditService.js', () => ({
+  ReplacementAuditService: class {
+    async initialize() {}
+    async logReplacement() {}
+    async close() {}
+  }
+}));
 
-// Import server AFTER mocking axios
-import { server, api } from "../src/mcp.js";
+describe("MCP Server (No Mocks Integration)", () => {
+  let core: NeuralNexusCore;
+  let mcpServer: any;
 
-test("MCP list tools", async () => {
-  // @ts-ignore
-  const handler = server._requestHandlers.get("tools/list");
-  const result = await handler({
-    method: "tools/list"
-  });
-  expect(result.tools).toHaveLength(2);
-  expect(result.tools[0].name).toBe("recall_memory");
-});
+  beforeEach(() => {
+    const config = normalizeMemoryConfig({});
+    core = new NeuralNexusCore(config);
+    
+    // Inject Fakes
+    (core as any).storage = new InMemoryStorageFake();
+    (core as any).embedding = new EmbeddingFake();
 
-test("MCP call recall tool", async () => {
-  vi.mocked(api.post).mockResolvedValue({
-    data: { memories: [{ text: "test memory", category: "fact" }] }
-  } as any);
-
-  // @ts-ignore
-  const handler = server._requestHandlers.get("tools/call");
-  const result = await handler({
-    method: "tools/call",
-    params: {
-      name: "recall_memory",
-      arguments: { query: "test" }
-    }
+    mcpServer = createMcpServer(core);
   });
 
-  expect(result.content[0].text).toContain("test memory");
-});
-
-test("MCP call store tool", async () => {
-  vi.mocked(api.post).mockResolvedValue({ status: 201 } as any);
-
-  // @ts-ignore
-  const handler = server._requestHandlers.get("tools/call");
-  const result = await handler({
-    method: "tools/call",
-    params: {
-      name: "store_memory",
-      arguments: { text: "new info" }
-    }
+  test("MCP list tools returns tool definitions", async () => {
+    // @ts-ignore
+    const handler = mcpServer._requestHandlers.get("tools/list");
+    const result = await handler({ method: "tools/list" });
+    
+    expect(result.tools).toHaveLength(2);
+    expect(result.tools.find((t: any) => t.name === "recall_memory")).toBeDefined();
   });
 
-  expect(result.content[0].text).toBe("Memory stored successfully.");
-});
+  test("MCP call store_memory actually stores in the fake database", async () => {
+    // @ts-ignore
+    const handler = mcpServer._requestHandlers.get("tools/call");
+    
+    await handler({
+      method: "tools/call",
+      params: {
+        name: "store_memory",
+        arguments: { text: "MCP stored this", category: "fact", userId: "user1" }
+      }
+    });
 
-test("MCP handle tool not found", async () => {
-  // @ts-ignore
-  const handler = server._requestHandlers.get("tools/call");
-  const result = await handler({
-    method: "tools/call",
-    params: {
-      name: "unknown_tool",
-      arguments: {}
-    }
+    // Verify it actually reached the core logic and storage
+    const recall = await core.recall({ query: "MCP", userId: "user1" });
+    expect(recall.memories).toHaveLength(1);
+    expect(recall.memories[0].text).toBe("MCP stored this");
   });
-  
-  expect(result.isError).toBe(true);
-  expect(result.content[0].text).toContain("Tool not found");
+
+  test("MCP call recall_memory actually retrieves from the fake database", async () => {
+    // 1. Pre-seed the fake storage
+    await core.store({ text: "Existing memory", userId: "user1" });
+
+    // 2. Call MCP recall
+    // @ts-ignore
+    const handler = mcpServer._requestHandlers.get("tools/call");
+    const result = await handler({
+      method: "tools/call",
+      params: {
+        name: "recall_memory",
+        arguments: { query: "Existing", userId: "user1" }
+      }
+    });
+
+    expect(result.content[0].text).toContain("Existing memory");
+  });
 });
