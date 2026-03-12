@@ -4,3 +4,12 @@ qdrant/
 *.log
 .env
 .DS_Store
+
+# Local data and state
+data/
+storage/
+.qdrant-initialized
+
+# Binaries and archives
+bin_qdrant/
+*.tar.gz
