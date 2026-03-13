@@ -133,7 +133,7 @@ export class NeuralNexusCore {
      */
     async store(request: StoreRequest): Promise<void> {
         const vector = await this.embedding.createVector(request.text);
-        const userId = request.userId || "anonymous";
+        const userId = request.userId || request.userid || "anonymous";
 
         await this.lock.acquire(`store:${userId}`, async () => {
             const existing = await this.storage.find(vector, 1, userId);

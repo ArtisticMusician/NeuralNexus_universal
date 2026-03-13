@@ -102,7 +102,7 @@ class StreamInterceptor extends Transform {
 
             try {
                 const args = JSON.parse(full);
-                core.store({ ...args, userId: this.userId }).catch((err) => {
+                core.store({ ...args, userid: this.userId }).catch((err) => {
                     console.error("[StreamInterceptor] Failed to store memory:", err);
                 });
             } catch (e) {
@@ -117,7 +117,7 @@ class StreamInterceptor extends Transform {
 
 server.post("/v1/chat/completions", async (request, reply) => {
     const body = request.body as any;
-    const userId = (request.headers["userId"] || request.headers["x-userId"]) as string;
+    const userId = (request.headers["userid"] || request.headers["x-userid"]) as string;
     const messages = body.messages || [];
 
     const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content;
@@ -164,7 +164,7 @@ server.post("/v1/chat/completions", async (request, reply) => {
                     if (call.function?.name === "store_memory") {
                         try {
                             const args = JSON.parse(call.function.arguments);
-                            await core.store({ ...args, userId });
+                            await core.store({ ...args, userid: userId });
                         } catch (e) {
                             server.log.error(e, "Failed to execute tool call in non-streaming mode");
                         }

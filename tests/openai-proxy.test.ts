@@ -54,7 +54,7 @@ describe('OpenAI Proxy (Fidelity Streaming Integration)', () => {
       method: 'POST',
       url: '/v1/chat/completions',
       payload: { stream: true, messages: [] },
-      headers: { 'userId': 'user123' }
+      headers: { 'userid': 'user123' }
     });
 
     // 3. Push chunks into the stream
@@ -74,7 +74,7 @@ describe('OpenAI Proxy (Fidelity Streaming Integration)', () => {
     // 4. VERIFY: Did the interceptor actually trigger the core store?
     expect(mockCoreStore).toHaveBeenCalledWith(expect.objectContaining({
       text: 'streamed fact',
-      userId: 'user123'
+      userid: 'user123'
     }));
   });
 
@@ -106,7 +106,7 @@ describe('OpenAI Proxy (Fidelity Streaming Integration)', () => {
         stream: true,
         messages: [{ role: 'user', content: 'Tell me about that uniquely crafted long sentence to test jaccard overlap specifically. It seems very interesting.' }]
       },
-      headers: { 'userId': 'user123' }
+      headers: { 'userid': 'user123' }
     });
 
     // Verify the payload sent to OpenAI does NOT contain the first memory but DOES contain the second
