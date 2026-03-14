@@ -6,12 +6,12 @@ All endpoints require `X-API-Key` (if configured) and optionally `User-Id` (for 
 
 ### `POST /recall`
 Search long-term memory.
-- **Body**: `{ query: string, limit?: number, userId?: string, maxTokens?: number }`
+- **Body**: `{ query: string, limit?: number, userid?: string, maxTokens?: number }`
 - **Logic**: Hybrid search (Vector + BM25) merged via RRF.
 
 ### `POST /store`
 Add or update memory.
-- **Body**: `{ text: string, category?: string, userId?: string, metadata?: object }`
+- **Body**: `{ text: string, category?: string, userid?: string, metadata?: object }`
 - **Deduplication**: Merges if similarity >= 0.95.
 
 ### `POST /reinforce`
@@ -25,7 +25,7 @@ Retrieve the replacement audit log (SQLite-backed).
 
 ### `GET /admin/export`
 Export memories in NDJSON format.
-- **Query Param**: `userId` (optional)
+- **Query Param**: `userid` (optional)
 
 ### `POST /admin/import`
 Import memories from NDJSON string.

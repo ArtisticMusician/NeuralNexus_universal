@@ -33,7 +33,7 @@
         "created_at": { "type": "integer", "description": "Unix timestamp (ms) of creation" },
         "last_accessed": { "type": "integer", "description": "Unix timestamp (ms) of last retrieval" },
         "strength": { "type": "number", "minimum": 0, "description": "The reinforced importance of this memory" },
-        "userId": { "type": "string", "description": "Owner of the memory (optional for single-user)" },
+        "userid": { "type": "string", "description": "Owner of the memory (optional for single-user)" },
         "source": { "type": "string", "description": "Origin of the memory (e.g., 'telegram', 'cli')" },
         "decayed_score": { "type": "number", "description": "The score after applying time decay (read-only)" }
       },

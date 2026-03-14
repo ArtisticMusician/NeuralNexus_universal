@@ -15,7 +15,7 @@ export class StorageService {
             });
 
             await this.client.createPayloadIndex(this.collection, {
-                field_name: "userId",
+                field_name: "userid",
                 field_schema: "keyword",
             });
 
@@ -54,9 +54,9 @@ export class StorageService {
      * Pass 1: Semantic Vector Search
      * Pass 2: Native Full-Text Search (BM25-like via Qdrant)
      */
-    async find(vector: number[], limit: number, userId: string = "anonymous", query?: string, rrfK: number = 60, alpha: number = 0.7) {
+    async find(vector: number[], limit: number, userid: string = "anonymous", query?: string, rrfK: number = 60, alpha: number = 0.7) {
         try {
-            const filter = { must: [{ key: "userId", match: { value: userId } }] };
+            const filter = { must: [{ key: "userid", match: { value: userid } }] };
 
             // Pass 1: Vector (semantic similarity)
             const vectorPromise = this.client.search(this.collection, {
@@ -84,7 +84,7 @@ export class StorageService {
                 
                 const textFilter = {
                     must: [
-                        { key: "userId", match: { value: userId } },
+                        { key: "userid", match: { value: userid } },
                         { key: "text", match: { text: query } } // Native full-text match
                     ]
                 };
@@ -166,8 +166,8 @@ export class StorageService {
         }
     }
 
-    async scrollAll(userId: string = "anonymous"): Promise<any[]> {
-        const filter = { must: [{ key: "userId", match: { value: userId } }] };
+    async scrollAll(userid: string = "anonymous"): Promise<any[]> {
+        const filter = { must: [{ key: "userid", match: { value: userid } }] };
         const allPoints: any[] = [];
         let nextOffset: string | number | Record<string, unknown> | null | undefined = undefined;
 

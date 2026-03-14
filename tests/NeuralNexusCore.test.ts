@@ -36,9 +36,9 @@ describe('NeuralNexusCore (Mock-less Integration)', () => {
 
   it('stores and recalls a memory without mocks', async () => {
     const text = "The capital of France is Paris.";
-    await core.store({ text, userId: "user1" });
+    await core.store({ text, userid: "user1" });
 
-    const result = await core.recall({ query: "What is the capital of France?", userId: "user1" });
+    const result = await core.recall({ query: "What is the capital of France?", userid: "user1" });
 
     expect(result.memories).toHaveLength(1);
     expect(result.memories[0].text).toBe(text);
@@ -46,25 +46,25 @@ describe('NeuralNexusCore (Mock-less Integration)', () => {
   });
 
   it('enforces multi-tenancy (privacy) automatically', async () => {
-    await core.store({ text: "User A secret", userId: "userA" });
-    await core.store({ text: "User B secret", userId: "userB" });
+    await core.store({ text: "User A secret", userid: "userA" });
+    await core.store({ text: "User B secret", userid: "userB" });
 
-    const resultA = await core.recall({ query: "secret", userId: "userA" });
+    const resultA = await core.recall({ query: "secret", userid: "userA" });
     expect(resultA.memories).toHaveLength(1);
     expect(resultA.memories[0].text).toContain("User A");
 
-    const resultB = await core.recall({ query: "secret", userId: "userB" });
+    const resultB = await core.recall({ query: "secret", userid: "userB" });
     expect(resultB.memories).toHaveLength(1);
     expect(resultB.memories[0].text).toContain("User B");
   });
 
   it('performs semantic deduplication (merge) based on similarity', async () => {
     const original = "I love eating red apples.";
-    await core.store({ text: original, userId: "user1" });
+    await core.store({ text: original, userid: "user1" });
 
     // Very similar text
     const duplicate = "I love eating red apples.";
-    await core.store({ text: duplicate, userId: "user1" });
+    await core.store({ text: duplicate, userid: "user1" });
 
     const all = await storage.scrollAll("user1");
     expect(all).toHaveLength(1);
@@ -73,12 +73,12 @@ describe('NeuralNexusCore (Mock-less Integration)', () => {
 
   it('recalculates embedding vector on merge to prevent semantic drift', async () => {
     const original = "The sky is blue today.";
-    await core.store({ text: original, userId: "user1" });
+    await core.store({ text: original, userid: "user1" });
 
     const storeSpy = vi.spyOn(storage, 'store');
 
     const duplicate = "The sky is very blue today.";
-    await core.store({ text: duplicate, userId: "user1" });
+    await core.store({ text: duplicate, userid: "user1" });
 
     expect(storeSpy).toHaveBeenCalled();
     const calls = storeSpy.mock.calls;
@@ -88,12 +88,12 @@ describe('NeuralNexusCore (Mock-less Integration)', () => {
 
   it('filters results below the recall threshold', async () => {
     // Manually push a low-scoring result to the fake storage
-    await storage.store("id1", new Array(384).fill(0), { text: "Irrelevant", userId: "user1" });
+    await storage.store("id1", new Array(384).fill(0), { text: "Irrelevant", userid: "user1" });
 
     // Set a very high threshold manually
     (core as any).config.thresholds.recall = 0.9;
 
-    const result = await core.recall({ query: "target", userId: "user1" });
+    const result = await core.recall({ query: "target", userid: "user1" });
     expect(result.memories).toHaveLength(0);
   });
 });

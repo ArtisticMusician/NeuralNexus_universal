@@ -17,7 +17,7 @@ export interface MemoryEntry {
 export interface RecallRequest {
   query: string;
   limit?: number;
-  userId?: string;
+  userid?: string;
   category?: MemoryCategory;
   maxTokens?: number;
 }
@@ -36,7 +36,7 @@ export type MergeStrategy = "recompute" | "average" | "replace";
 export interface StoreRequest {
   text: string;
   category?: MemoryCategory;
-  userId?: string;
+  userid?: string;
   metadata?: Record<string, any>;
   mergeStrategy?: MergeStrategy;
 }

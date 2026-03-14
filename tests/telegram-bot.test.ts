@@ -54,7 +54,7 @@ describe("Telegram Bot (No Mocks Integration)", () => {
     };
 
     // 1. Seed the fake storage directly
-    await core.store({ text: "User name is Josh", userId: "telegram:999" });
+    await core.store({ text: "User name is Josh", userid: "telegram:999" });
 
     // 2. Trigger the bot handler
     await recallHandler(mockCtx);
@@ -77,7 +77,7 @@ describe("Telegram Bot (No Mocks Integration)", () => {
     await textHandler(mockCtx);
 
     // Verify it actually reached the core and storage
-    const recall = await core.recall({ query: "pizza", userId: "telegram:999" });
+    const recall = await core.recall({ query: "pizza", userid: "telegram:999" });
     expect(recall.memories).toHaveLength(1);
     expect(recall.memories[0].text).toContain("pizza");
     expect(mockCtx.reply).toHaveBeenCalledWith(expect.stringContaining('Saved'));

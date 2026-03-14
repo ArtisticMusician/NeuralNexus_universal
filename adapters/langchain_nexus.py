@@ -5,10 +5,10 @@ from typing import Optional, List, Dict, Any
 class NeuralNexusClient:
     """Official Python client for the Neural Nexus Universal Memory API."""
     
-    def __init__(self, base_url: str = "http://localhost:3000", api_key: Optional[str] = None, userId: Optional[str] = None):
+    def __init__(self, base_url: str = "http://localhost:3000", api_key: Optional[str] = None, userid: Optional[str] = None):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
-        self.default_userId = userId
+        self.default_userid = userid
 
     def _get_headers(self) -> Dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -16,12 +16,12 @@ class NeuralNexusClient:
             headers["X-API-Key"] = self.api_key
         return headers
 
-    def recall(self, query: str, limit: int = 5, userId: Optional[str] = None, max_tokens: Optional[int] = None) -> List[Dict[str, Any]]:
+    def recall(self, query: str, limit: int = 5, userid: Optional[str] = None, max_tokens: Optional[int] = None) -> List[Dict[str, Any]]:
         """Search long-term memory."""
         payload = {
             "query": query, 
             "limit": limit, 
-            "userId": userId or self.default_userId,
+            "userid": userid or self.default_userid,
             "max_tokens": max_tokens
         }
         response = requests.post(
@@ -32,12 +32,12 @@ class NeuralNexusClient:
         response.raise_for_status()
         return response.json().get("memories", [])
 
-    def store(self, text: str, category: str = "fact", userId: Optional[str] = None, metadata: Optional[Dict] = None) -> bool:
+    def store(self, text: str, category: str = "fact", userid: Optional[str] = None, metadata: Optional[Dict] = None) -> bool:
         """Save a new memory."""
         payload = {
             "text": text, 
             "category": category, 
-            "userId": userId or self.default_userId,
+            "userid": userid or self.default_userid,
             "metadata": metadata or {}
         }
         response = requests.post(
@@ -67,9 +67,9 @@ class NeuralNexusClient:
         response.raise_for_status()
         return response.json()
 
-    def export_memories(self, userId: Optional[str] = None) -> str:
+    def export_memories(self, userid: Optional[str] = None) -> str:
         """Export memories as NDJSON."""
-        params = {"userId": userId or self.default_userId}
+        params = {"userid": userid or self.default_userid}
         response = requests.get(
             f"{self.base_url}/admin/export", 
             params=params, 

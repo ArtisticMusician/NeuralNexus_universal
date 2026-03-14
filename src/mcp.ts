@@ -42,9 +42,9 @@ export function createMcpServer(core: NeuralNexusCore) {
                                 default: 5,
                             },
                             // ──────────────────────────────────────────────
-                            // NEW — exposes userId so clients actually send it
+                            // NEW — exposes userid so clients actually send it
                             // ──────────────────────────────────────────────
-                            userId: {
+                            userid: {
                                 type: "string",
                                 description:
                                     "Unique identifier for the user whose memories should be searched. " +
@@ -78,7 +78,7 @@ export function createMcpServer(core: NeuralNexusCore) {
                             // ──────────────────────────────────────────────
                             // NEW — same addition for store_memory
                             // ──────────────────────────────────────────────
-                            userId: {
+                            userid: {
                                 type: "string",
                                 description:
                                     "Unique identifier for the user who owns this memory. " +
@@ -94,14 +94,14 @@ export function createMcpServer(core: NeuralNexusCore) {
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args } = request.params;
-        const userId = (args as any).userId || "anonymous";
+        const userid = (args as any).userid || "anonymous";
 
         try {
             if (name === "recall_memory") {
                 const response = await core.recall({
                     query: (args as any).query,
                     limit: (args as any).limit,
-                    userId,
+                    userid,
                 });
 
                 let memoriesToDisplay = response.memories;
@@ -129,7 +129,7 @@ export function createMcpServer(core: NeuralNexusCore) {
                 await core.store({
                     text: (args as any).text,
                     category: (args as any).category,
-                    userId,
+                    userid,
                 });
                 return {
                     content: [{ type: "text", text: "Memory stored successfully." }],

@@ -38,8 +38,8 @@ export class InMemoryStorageFake {
     return this.points.find(p => p.id === id) || null;
   }
 
-  async find(vector: number[], limit: number, userId: string = "anonymous", query?: string, rrfK: number = 60) {
-    let filtered = this.points.filter(p => p.payload.userId === userId);
+  async find(vector: number[], limit: number, userid: string = "anonymous", query?: string, rrfK: number = 60) {
+    let filtered = this.points.filter(p => p.payload.userid === userid);
 
     const vectorPass = filtered.map(p => ({
       ...p,
@@ -81,8 +81,8 @@ export class InMemoryStorageFake {
       .map(s => ({ ...s.point, score: s.score }));
   }
 
-  async scrollAll(userId: string) {
-    return this.points.filter(p => p.payload.userId === userId);
+  async scrollAll(userid: string) {
+    return this.points.filter(p => p.payload.userid === userid);
   }
 
   async updatePayload(id: string, partial: any) {
@@ -109,17 +109,17 @@ export class InMemoryStorageFake {
       return this.points.filter(p => options.ids.includes(p.id));
   }
   async search(collection: string, options: any) {
-    const userId = options.filter?.must?.find((m: any) => m.key === 'userId')?.match?.value || "anonymous";
+    const userid = options.filter?.must?.find((m: any) => m.key === 'userid')?.match?.value || "anonymous";
     // For raw search, we don't want RRF, just the vector result
-    return (this.points.filter(p => p.payload.userId === userId).map(p => ({
+    return (this.points.filter(p => p.payload.userid === userid).map(p => ({
         ...p,
         score: this.cosineSim(options.vector, p.vector)
     })).sort((a, b) => b.score - a.score).slice(0, options.limit));
   }
   async scroll(collection: string, options: any) {
-      const userId = options.filter?.must?.find((m: any) => m.key === 'userId')?.match?.value || "anonymous";
+      const userid = options.filter?.must?.find((m: any) => m.key === 'userid')?.match?.value || "anonymous";
       const textQuery = options.filter?.must?.find((m: any) => m.key === 'text')?.match?.text;
-      let points = this.points.filter(p => p.payload.userId === userId);
+      let points = this.points.filter(p => p.payload.userid === userid);
       if (textQuery) {
           points = points.filter(p => (p.payload.text || "").toLowerCase().includes(textQuery.toLowerCase()));
       }

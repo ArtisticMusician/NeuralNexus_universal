@@ -15,7 +15,7 @@ The system follows a **Singleton Orchestration** pattern.
 The OpenAI Proxy (`openai-proxy.ts`) implements a **Transform Stream** (`StreamInterceptor`) that parses SSE chunks. It detects `delta` tool calls for `store_memory` and executes them without interrupting the user's real-time stream.
 
 ## 4. Multi-Tenancy & Security
-- **Mandatory Filter**: `userId` is a required parameter for `find` and `scroll` operations in `StorageService`.
+- **Mandatory Filter**: `userid` is a required parameter for `find` and `scroll` operations in `StorageService`.
 - **Auth**: Protected by `X-API-Key` global hook in Fastify.
 
 ## 5. Configuration (New Overrides)

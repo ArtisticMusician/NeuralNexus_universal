@@ -153,18 +153,18 @@ server.addHook("onReady", async () => {
     server.log.info("Neural Nexus Core initialized");
 });
 
-// Helper to get userId from header or body
-const getuserId = (request: any): string | undefined => {
-    const header = request.headers["userId"] || request.headers["x-userId"];
+// Helper to get userid from header or body
+const getuserid = (request: any): string | undefined => {
+    const header = request.headers["userid"] || request.headers["x-userid"];
     if (header) return Array.isArray(header) ? header[0] : header;
-    return request.body?.userId || request.body?.userId;
+    return request.body?.userid || request.body?.userid;
 };
 
 // --- Endpoints ---
 
 server.post("/recall", async (request, reply) => {
     const body = request.body as any;
-    const userId = getuserId(request);
+    const userid = getuserid(request);
 
     if (!body.query) {
         return reply.status(400).send({ error: "query is required" });
@@ -173,7 +173,7 @@ server.post("/recall", async (request, reply) => {
     const results = await core.recall({
         query: body.query,
         limit: body.limit,
-        userId: userId,
+        userid: userid,
         maxTokens: body.max_tokens || body.maxTokens,
     });
 
@@ -182,7 +182,7 @@ server.post("/recall", async (request, reply) => {
 
 server.post("/store", async (request, reply) => {
     const body = request.body as any;
-    const userId = getuserId(request);
+    const userid = getuserid(request);
 
     if (!body.text) {
         return reply.status(400).send({ error: "text is required" });
@@ -191,7 +191,7 @@ server.post("/store", async (request, reply) => {
     await core.store({
         text: body.text,
         category: body.category,
-        userId: userId,
+        userid: userid,
         metadata: body.metadata,
     });
 
@@ -229,8 +229,8 @@ server.get("/categories", async () => {
 
 // Admin Endpoints
 server.get("/admin/export", async (request, reply) => {
-    const query = request.query as { userId?: string };
-    const memories = await core.exportMemories(query.userId);
+    const query = request.query as { userid?: string };
+    const memories = await core.exportMemories(query.userid);
 
     reply.header(
         "Content-Disposition",

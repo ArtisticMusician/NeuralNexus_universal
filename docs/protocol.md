@@ -10,7 +10,7 @@ Standardized JSON structure:
 - `text`: String content.
 - `category`: `fact`, `preference`, `decision`, `entity`, `other`.
 - `vector`: Float array.
-- `metadata`: `created_at`, `last_accessed`, `strength`, `userId`.
+- `metadata`: `created_at`, `last_accessed`, `strength`, `userid`.
 
 ### 1.2 The Decay Engine
 Formula: `decayed_score = base_score * (1 / (1 + lambda * (now - last_accessed))) * strength`.
@@ -25,14 +25,14 @@ Implementations MUST use **Reciprocal Rank Fusion (RRF)** to merge Vector and Ke
 
 ### 2.2 Semantic Deduplication
 - Implementations MUST perform semantic deduplication before storage.
-- If a new memory has a cosine similarity **>= 0.95** with an existing memory belonging to the same `userId`, the existing memory MUST be updated/merged instead of creating a duplicate.
+- If a new memory has a cosine similarity **>= 0.95** with an existing memory belonging to the same `userid`, the existing memory MUST be updated/merged instead of creating a duplicate.
 
 ### 2.3 Strict Multi-Tenancy
-- Implementations MUST enforce mandatory `userId` filtering at the storage layer.
+- Implementations MUST enforce mandatory `userid` filtering at the storage layer.
 - Searching across all users is prohibited to prevent data leaks.
 
 ### 2.3 Atomicity
-- Implementations MUST use atomic locking (per `userId` and `memoryId`) to prevent race conditions during deduplication.
+- Implementations MUST use atomic locking (per `userid` and `memoryId`) to prevent race conditions during deduplication.
 
 ### 2.4 Context-Aware Refinement
 - Implementations SHOULD support deduplication of retrieved results against the current interaction context.

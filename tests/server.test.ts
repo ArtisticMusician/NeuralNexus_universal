@@ -36,26 +36,26 @@ describe("API Server (No Mocks Integration)", () => {
     const response = await server.inject({
       method: 'POST',
       url: '/store',
-      payload: { text: "API stored this", userId: "api-user" }
+      payload: { text: "API stored this", userid: "api-user" }
     });
 
     expect(response.statusCode).toBe(201);
 
     // Verify it's actually in our fake storage
-    const recall = await core.recall({ query: "API", userId: "api-user" });
+    const recall = await core.recall({ query: "API", userid: "api-user" });
     expect(recall.memories).toHaveLength(1);
     expect(recall.memories[0].text).toBe("API stored this");
   });
 
   test("POST /recall retrieves data from fake database", async () => {
     // 1. Seed
-    await core.store({ text: "Find me", userId: "api-user" });
+    await core.store({ text: "Find me", userid: "api-user" });
 
     // 2. Recall via API
     const response = await server.inject({
       method: 'POST',
       url: '/recall',
-      payload: { query: "Find", userId: "api-user" }
+      payload: { query: "Find", userid: "api-user" }
     });
 
     expect(response.statusCode).toBe(200);

@@ -33,7 +33,7 @@ This document covers common issues and how to resolve them.
 
 ### Memories aren't showing up in Recall
 - **Cause**: `RECALL_THRESHOLD` is too high or `DECAY_LAMBDA` is too aggressive.
-- **Fix**: Lower `RECALL_THRESHOLD` to `0.05` in `.env`. Ensure you are using the correct `userId`.
+- **Fix**: Lower `RECALL_THRESHOLD` to `0.05` in `.env`. Ensure you are using the correct `userid`.
 
 ### Deduplication merging too many things
 - **Cause**: `SIMILARITY_THRESHOLD` is too low (e.g. 0.85).

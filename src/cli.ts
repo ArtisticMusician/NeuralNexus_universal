@@ -68,7 +68,7 @@ program
   .action(async (file, options) => {
     try {
       const res = await api.get(`/admin/export`, {
-        params: { userId: options.user },
+        params: { userid: options.user },
         responseType: 'text' 
       });
       

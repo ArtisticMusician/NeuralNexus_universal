@@ -76,26 +76,26 @@ describe('StorageService', () => {
       vector,
       limit: limit * 2, // Updated limit multiplier
       filter: {
-        must: [{ key: "userId", match: { value: "anonymous" } }],
+        must: [{ key: "userid", match: { value: "anonymous" } }],
       },
       with_payload: true,
     });
     expect(results).toHaveLength(1);
   });
 
-  it('searches with userId filter (vector only)', async () => {
+  it('searches with userid filter (vector only)', async () => {
     const vector = [0.1, 0.2];
     const limit = 5;
-    const userId = 'user-123';
+    const userid = 'user-123';
     client.search.mockResolvedValue([{ id: 1, score: 0.9, payload: { text: 'test' } }]);
 
-    await storageService.find(vector, limit, userId);
+    await storageService.find(vector, limit, userid);
 
     expect(client.search).toHaveBeenCalledWith('test_collection', {
       vector,
       limit: limit * 2,
       filter: {
-        must: [{ key: "userId", match: { value: userId } }],
+        must: [{ key: "userid", match: { value: userid } }],
       },
       with_payload: true,
     });
@@ -125,7 +125,7 @@ describe('StorageService', () => {
       limit: limit * 2,
       filter: {
         must: [
-          { key: "userId", match: { value: "anonymous" } },
+          { key: "userid", match: { value: "anonymous" } },
           { key: "text", match: { text: query } }
         ],
       },
@@ -159,21 +159,21 @@ describe('StorageService', () => {
     expect(results[1].id).toBe('k1');
   });
 
-  it('applies userId filter to keyword search', async () => {
+  it('applies userid filter to keyword search', async () => {
     const vector = [0.1, 0.2];
     const limit = 5;
-    const userId = 'user-123';
+    const userid = 'user-123';
     const query = 'test query';
     
     client.search.mockResolvedValue([]);
     client.scroll.mockResolvedValue({ points: [], next_page_offset: null });
 
-    await storageService.find(vector, limit, userId, query);
+    await storageService.find(vector, limit, userid, query);
 
     expect(client.scroll).toHaveBeenCalledWith('test_collection', expect.objectContaining({
       filter: {
         must: [
-          { key: "userId", match: { value: userId } },
+          { key: "userid", match: { value: userid } },
           { key: "text", match: { text: query } },
         ],
       }

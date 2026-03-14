@@ -27,7 +27,7 @@ class StreamInterceptor extends Transform {
     private buffer: string = "";
     private toolBuffers: Map<number, { name: string; fragments: string[] }> = new Map();
 
-    constructor(private userId?: string) {
+    constructor(private userid?: string) {
         super();
     }
 
@@ -102,7 +102,7 @@ class StreamInterceptor extends Transform {
 
             try {
                 const args = JSON.parse(full);
-                core.store({ ...args, userId: this.userId }).catch((err) => {
+                core.store({ ...args, userid: this.userid }).catch((err) => {
                     console.error("[StreamInterceptor] Failed to store memory:", err);
                 });
             } catch (e) {
@@ -117,13 +117,13 @@ class StreamInterceptor extends Transform {
 
 server.post("/v1/chat/completions", async (request, reply) => {
     const body = request.body as any;
-    const userId = (request.headers["userId"] || request.headers["x-userId"]) as string;
+    const userid = (request.headers["userid"] || request.headers["x-userid"]) as string;
     const messages = body.messages || [];
 
     const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content;
     if (lastUserMessage && typeof lastUserMessage === "string") {
         try {
-            const recallRes = await core.recall({ query: lastUserMessage, limit: 3, userId });
+            const recallRes = await core.recall({ query: lastUserMessage, limit: 3, userid });
             if (recallRes.memories.length > 0) {
                 let systemMsg = messages.find((m: any) => m.role === "system");
                 if (!systemMsg) {
@@ -164,7 +164,7 @@ server.post("/v1/chat/completions", async (request, reply) => {
                     if (call.function?.name === "store_memory") {
                         try {
                             const args = JSON.parse(call.function.arguments);
-                            await core.store({ ...args, userId });
+                            await core.store({ ...args, userid });
                         } catch (e) {
                             server.log.error(e, "Failed to execute tool call in non-streaming mode");
                         }
@@ -178,7 +178,7 @@ server.post("/v1/chat/completions", async (request, reply) => {
         // attempt to send its own after the async handler resolves
         reply.hijack();
         reply.raw.writeHead(response.status, response.headers as any);
-        const interceptor = new StreamInterceptor(userId);
+        const interceptor = new StreamInterceptor(userid);
         response.data.pipe(interceptor).pipe(reply.raw);
         return;
     } catch (err: any) {

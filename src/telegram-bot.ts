@@ -48,8 +48,8 @@ export function createTelegramBot(core: NeuralNexusCore) {
     if (!query) return ctx.reply('Please provide a query: /recall <query>');
 
     try {
-      const userId = `telegram:${ctx.from.id}`;
-      const res = await core.recall({ query, limit: 3, userId });
+      const userid = `telegram:${ctx.from.id}`;
+      const res = await core.recall({ query, limit: 3, userid });
       const memories = res.memories;
 
       if (!memories || memories.length === 0) {
@@ -68,7 +68,7 @@ export function createTelegramBot(core: NeuralNexusCore) {
     const text = ctx.message.text;
     if (text.startsWith('/')) return; // Ignore other commands
 
-    const userId = `telegram:${ctx.from.id}`;
+    const userid = `telegram:${ctx.from.id}`;
 
     // ──────────────────────────────────────────────
     // 1. Check whether the message matches a "Store as <category>" button press,
@@ -85,7 +85,7 @@ export function createTelegramBot(core: NeuralNexusCore) {
       if (inlineContent) {
         // "Store as preference: I like coffee" → store right away
         try {
-          await core.store({ text: inlineContent, userId, category });
+          await core.store({ text: inlineContent, userid, category });
           return ctx.reply(`✅ Saved to long-term memory as "${category}".`);
         } catch (err: any) {
           return ctx.reply(`❌ Failed to store: ${err.message}`);
@@ -106,7 +106,7 @@ export function createTelegramBot(core: NeuralNexusCore) {
     if (category) {
       pendingCategory.delete(ctx.from.id);
       try {
-        await core.store({ text, userId, category });
+        await core.store({ text, userid, category });
         return ctx.reply(`✅ Saved to long-term memory as "${category}".`);
       } catch (err: any) {
         return ctx.reply(`❌ Failed to store: ${err.message}`);
@@ -117,7 +117,7 @@ export function createTelegramBot(core: NeuralNexusCore) {
     // 3. Default: no category specified — let the core auto-classify.
     // ──────────────────────────────────────────────
     try {
-      await core.store({ text, userId });
+      await core.store({ text, userid });
       ctx.reply('✅ Saved to long-term memory.');
     } catch (err: any) {
       ctx.reply(`❌ Failed to store: ${err.message}`);

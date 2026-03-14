@@ -189,7 +189,7 @@ Neural Nexus Universal is a production-grade long-term memory system designed fo
 
 ## Potential Areas for Improvement
 - **Category Heuristics**: The regex-based `CategoryService` is fast but inherently limited. Moving to a small, fine-tuned local classifier model would improve accuracy for complex intents.
-- **Inconsistent Schema**: Some clients use `user_id` while others use `userId`. Standardizing on one throughout the codebase (already partially mitigated by server-side helpers) would improve maintainability.
+- **Inconsistent Schema**: Some clients use `user_id` while others use `userid`. Standardizing on one throughout the codebase (already partially mitigated by server-side helpers) would improve maintainability.
 
 ## Final Verdict
 Neural Nexus Universal is an **excellent** architectural specimen of how long-term memory should be implemented for LLMs. It balances performance, privacy, and utility with a sophisticated retrieval engine and a professional-grade deployment infrastructure.

@@ -16,8 +16,8 @@ describe('Safeguard Suite (Regression Prevention)', () => {
   describe('RRF Score Scale Integrity', () => {
     it('verifies RRF scores fall within a range compatible with RECALL_THRESHOLD (0.01)', async () => {
       // Store 2 memories
-      await fakeDb.store('1', new Array(384).fill(1), { text: 'Apple', userId: 'user1' });
-      await fakeDb.store('2', new Array(384).fill(1), { text: 'Banana', userId: 'user1' });
+      await fakeDb.store('1', new Array(384).fill(1), { text: 'Apple', userid: 'user1' });
+      await fakeDb.store('2', new Array(384).fill(1), { text: 'Banana', userid: 'user1' });
 
       // Search
       const results = await storage.find(new Array(384).fill(1), 10, 'user1', 'Apple');
@@ -34,7 +34,7 @@ describe('Safeguard Suite (Regression Prevention)', () => {
 
   describe('Semantic Confidence Preservation', () => {
     it('preserves original cosine similarity in metadata even after RRF', async () => {
-      await fakeDb.store('1', [1, 0], { text: 'Exact Match', userId: 'user1' });
+      await fakeDb.store('1', [1, 0], { text: 'Exact Match', userid: 'user1' });
 
       // Search with exact vector
       const results = await storage.find([1, 0], 1, 'user1');

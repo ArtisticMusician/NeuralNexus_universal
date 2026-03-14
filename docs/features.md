@@ -37,7 +37,7 @@ Adjusts relevance based on time and importance.
 
 ### 6) Atomic Locking
 Uses `async-lock` to prevent race conditions.
-- Locks are applied per `userId` during storage and per `memoryId` during reinforcement.
+- Locks are applied per `userid` during storage and per `memoryId` during reinforcement.
 
 ---
 
@@ -45,7 +45,7 @@ Uses `async-lock` to prevent race conditions.
 
 ### 7) Strict Multi-Tenancy
 Mandatory isolation of user data.
-- All storage and retrieval operations are hard-filtered by `userId`.
+- All storage and retrieval operations are hard-filtered by `userid`.
 - Data leakage between users is mathematically and architecturally prevented.
 
 ### 8) Replacement Audit Trail

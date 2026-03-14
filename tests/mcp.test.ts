@@ -46,19 +46,19 @@ describe("MCP Server (No Mocks Integration)", () => {
       method: "tools/call",
       params: {
         name: "store_memory",
-        arguments: { text: "MCP stored this", category: "fact", userId: "user1" }
+        arguments: { text: "MCP stored this", category: "fact", userid: "user1" }
       }
     });
 
     // Verify it actually reached the core logic and storage
-    const recall = await core.recall({ query: "MCP", userId: "user1" });
+    const recall = await core.recall({ query: "MCP", userid: "user1" });
     expect(recall.memories).toHaveLength(1);
     expect(recall.memories[0].text).toBe("MCP stored this");
   });
 
   test("MCP call recall_memory actually retrieves from the fake database", async () => {
     // 1. Pre-seed the fake storage
-    await core.store({ text: "Existing memory", userId: "user1" });
+    await core.store({ text: "Existing memory", userid: "user1" });
 
     // 2. Call MCP recall
     // @ts-ignore
@@ -67,7 +67,7 @@ describe("MCP Server (No Mocks Integration)", () => {
       method: "tools/call",
       params: {
         name: "recall_memory",
-        arguments: { query: "Existing", userId: "user1" }
+        arguments: { query: "Existing", userid: "user1" }
       }
     });
 

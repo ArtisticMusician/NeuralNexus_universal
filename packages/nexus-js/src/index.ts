@@ -20,7 +20,7 @@ export interface MemoryEntry {
 export interface RecallRequest {
   query: string;
   limit?: number;
-  userId?: string;
+  userid?: string;
   category?: MemoryCategory;
   maxTokens?: number;
 }
@@ -32,7 +32,7 @@ export interface RecallResponse {
 export interface StoreRequest {
   text: string;
   category?: MemoryCategory;
-  userId?: string;
+  userid?: string;
   metadata?: Record<string, any>;
 }
 
@@ -44,7 +44,7 @@ export interface ReinforceRequest {
 export interface ClientOptions {
   baseUrl?: string;
   apiKey?: string;
-  userId?: string;
+  userid?: string;
 }
 
 /**
@@ -53,11 +53,11 @@ export interface ClientOptions {
  */
 export class NeuralNexusClient {
   private api: AxiosInstance;
-  private defaultuserId?: string;
+  private defaultuserid?: string;
 
   constructor(options: ClientOptions = {}) {
     const baseUrl = (options.baseUrl || "http://localhost:3000").replace(/\/$/, "");
-    this.defaultuserId = options.userId;
+    this.defaultuserid = options.userid;
 
     this.api = axios.create({
       baseURL: baseUrl,
@@ -73,7 +73,7 @@ export class NeuralNexusClient {
    */
   async recall(request: RecallRequest): Promise<RecallResponse> {
     const payload = {
-      userId: this.defaultuserId,
+      userid: this.defaultuserid,
       ...request,
     };
     const response = await this.api.post<RecallResponse>("/recall", payload);
@@ -85,7 +85,7 @@ export class NeuralNexusClient {
    */
   async store(request: StoreRequest): Promise<{ status: string }> {
     const payload = {
-      userId: this.defaultuserId,
+      userid: this.defaultuserid,
       ...request,
     };
     const response = await this.api.post<{ status: string }>("/store", payload);
@@ -122,9 +122,9 @@ export class NeuralNexusClient {
   /**
    * Export all memories (admin functionality).
    */
-  async export(userId?: string): Promise<string> {
+  async export(userid?: string): Promise<string> {
     const response = await this.api.get<string>("/admin/export", {
-      params: { userId: userId || this.defaultuserId },
+      params: { userid: userid || this.defaultuserid },
       responseType: "text",
     });
     return response.data;

@@ -36,7 +36,7 @@ paths:
               required: [query]
               properties:
                 query: { type: string }
-                userId: { type: string }
+                userid: { type: string }
                 limit: { type: integer, default: 5 }
                 maxTokens: { type: integer }
       responses:
@@ -66,7 +66,7 @@ paths:
               properties:
                 text: { type: string }
                 category: { type: string, enum: [preference, fact, entity, decision, other] }
-                userId: { type: string }
+                userid: { type: string }
                 metadata: { type: object }
       responses:
         '201':
@@ -104,7 +104,7 @@ paths:
     get:
       summary: Export memories (Admin)
       parameters:
-        - name: userId
+        - name: userid
           in: query
           schema: { type: string }
       responses:

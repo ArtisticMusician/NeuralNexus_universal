@@ -65,12 +65,12 @@ export class NeuralNexusCore {
      * Recall relevant memories using Hybrid Search (Vector + Keyword) and Decay scoring.
      */
     async recall(request: RecallRequest): Promise<RecallResponse> {
-        const userId = request.userId || "anonymous";
+        const userid = request.userid || "anonymous";
         const vector = await this.embedding.createVector(request.query);
         const results = await this.storage.find(
             vector,
             request.limit || this.config.search.limit,
-            userId,
+            userid,
             request.query,
             this.config.search.rrfK,
             this.config.search.hybridAlpha ?? 0.7
@@ -133,17 +133,17 @@ export class NeuralNexusCore {
      */
     async store(request: StoreRequest): Promise<void> {
         const vector = await this.embedding.createVector(request.text);
-        const userId = request.userId || "anonymous";
+        const userid = request.userid || "anonymous";
 
-        await this.lock.acquire(`store:${userId}`, async () => {
-            const existing = await this.storage.find(vector, 1, userId);
+        await this.lock.acquire(`store:${userid}`, async () => {
+            const existing = await this.storage.find(vector, 1, userid);
             const threshold = this.config.thresholds.similarity;
 
             const match = existing[0];
             const similarity = match?.payload?._original_score ?? match?.score ?? 0;
 
             if (match && similarity >= threshold) {
-                return this.handleMerge(match, request, userId, vector);
+                return this.handleMerge(match, request, userid, vector);
             }
 
             const id = uuidv4();
@@ -153,7 +153,7 @@ export class NeuralNexusCore {
                 last_accessed: Date.now(),
                 created_at: Date.now(),
                 strength: 1,
-                userId: userId,
+                userid: userid,
                 ...request.metadata
             };
 
@@ -181,8 +181,8 @@ export class NeuralNexusCore {
         return await this.audit.getLogs(limit);
     }
 
-    async exportMemories(userId: string = "anonymous") {
-        const points = await this.storage.scrollAll(userId);
+    async exportMemories(userid: string = "anonymous") {
+        const points = await this.storage.scrollAll(userid);
         return points.map((p) => ({
             id: p.id,
             vector: p.vector,
@@ -197,7 +197,7 @@ export class NeuralNexusCore {
         for (let i = 0; i < memories.length; i += CHUNK_SIZE) {
             const chunk = memories.slice(i, i + CHUNK_SIZE);
             const points = chunk.map((m) => {
-                const payload = { ...m.payload, userId: m.payload?.userId || "anonymous" };
+                const payload = { ...m.payload, userid: m.payload?.userid || "anonymous" };
                 return {
                     id: m.id || uuidv4(),
                     vector: m.vector || [],
@@ -366,7 +366,7 @@ export class NeuralNexusCore {
 
     // --- Internal Logic ---
 
-    private async handleMerge(bestMatch: any, request: StoreRequest, userId: string, incomingVector: number[]) {
+    private async handleMerge(bestMatch: any, request: StoreRequest, userid: string, incomingVector: number[]) {
         const id = bestMatch.id.toString();
         const strategy = request.mergeStrategy || "recompute";
 
@@ -399,7 +399,7 @@ export class NeuralNexusCore {
             last_accessed: Date.now(),
             created_at: bestMatch.payload.created_at || Date.now(),
             strength: (bestMatch.payload.strength || 1) + 0.1,
-            userId: userId,
+            userid: userid,
             ...request.metadata
         });
 

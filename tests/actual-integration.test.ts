@@ -34,30 +34,30 @@ describe('Actual Multi-Container Integration Test', () => {
     });
 
     it('performs end-to-end store and hybrid recall using actual vector embeddings and Qdrant DB', async () => {
-        await core.store({ text: "The capital of actual France is indeed Paris.", category: "fact", userId: "test_user_1" });
-        await core.store({ text: "My favorite color is a deep actual blue.", category: "preference", userId: "test_user_1" });
+        await core.store({ text: "The capital of actual France is indeed Paris.", category: "fact", userid: "test_user_1" });
+        await core.store({ text: "My favorite color is a deep actual blue.", category: "preference", userid: "test_user_1" });
 
         // Let index settle briefly (Qdrant async indexing)
         await new Promise(res => setTimeout(res, 500));
 
-        const res1 = await core.recall({ query: "What is the capital of actual France?", userId: "test_user_1" });
+        const res1 = await core.recall({ query: "What is the capital of actual France?", userid: "test_user_1" });
         expect(res1.memories.length).toBeGreaterThan(0);
         expect(res1.memories[0].text).toContain("Paris");
 
-        const res2 = await core.recall({ query: "blue color", userId: "test_user_1" });
+        const res2 = await core.recall({ query: "blue color", userid: "test_user_1" });
         expect(res2.memories.length).toBeGreaterThan(0);
         expect(res2.memories[0].text).toContain("deep actual blue");
     });
 
     it('performs semantic deduplication against actual database', async () => {
-        await core.store({ text: "I actually love eating organic red apples.", category: "preference", userId: "test_user_2" });
+        await core.store({ text: "I actually love eating organic red apples.", category: "preference", userid: "test_user_2" });
         // Very similar text causing a merge
-        await core.store({ text: "I actually love eating organic red apples.", category: "preference", userId: "test_user_2" });
+        await core.store({ text: "I actually love eating organic red apples.", category: "preference", userid: "test_user_2" });
 
         await new Promise(res => setTimeout(res, 500));
 
         // verify only 1 exists for user
-        const res = await core.recall({ query: "organic red apples", limit: 10, userId: "test_user_2" });
+        const res = await core.recall({ query: "organic red apples", limit: 10, userid: "test_user_2" });
         expect(res.memories.length).toBe(1);
         expect(res.memories[0].metadata.strength).toBeGreaterThan(1); // Has merged
     });

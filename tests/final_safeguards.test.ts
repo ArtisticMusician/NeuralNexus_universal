@@ -89,8 +89,8 @@ describe('Final System Safeguards', () => {
   });
 
   describe('Multi-tenancy Safeguards', () => {
-    it('enforces userId in search', async () => {
-      await core.recall({ query: 'test', userId: 'user-123' });
+    it('enforces userid in search', async () => {
+      await core.recall({ query: 'test', userid: 'user-123' });
       expect(mocks.storage.find).toHaveBeenCalledWith(
         new Array(384).fill(0),
         10,

@@ -24,9 +24,9 @@ describe('Retrieval Accuracy & Fusion Math', () => {
         await core.initialize();
 
         // Seed data
-        await core.store({ text: "The apple is a red fruit and very sweet.", userId: "test" }); // Strong keyword candidate
-        await core.store({ text: "Banananas are yellow and curved.", userId: "test" });
-        await core.store({ text: "The fruit known as a pomme is technically an apple.", userId: "test" }); // Strong semantic candidate for "apple"
+        await core.store({ text: "The apple is a red fruit and very sweet.", userid: "test" }); // Strong keyword candidate
+        await core.store({ text: "Banananas are yellow and curved.", userid: "test" });
+        await core.store({ text: "The fruit known as a pomme is technically an apple.", userid: "test" }); // Strong semantic candidate for "apple"
     }, 60000);
 
     it('correctly blends semantic and keyword results in hybrid mode', async () => {
@@ -34,7 +34,7 @@ describe('Retrieval Accuracy & Fusion Math', () => {
         // "The apple is a red fruit..." has many keywords
         // "The fruit known as a pomme..." is semantically close but uses different words except 'fruit'
 
-        const res = await core.recall({ query: "red apple fruit", userId: "test", limit: 3 });
+        const res = await core.recall({ query: "red apple fruit", userid: "test", limit: 3 });
 
         expect(res.memories.length).toBeGreaterThanOrEqual(2);
 
@@ -52,7 +52,7 @@ describe('Retrieval Accuracy & Fusion Math', () => {
         // Bias heavily towards vector
         (core.config.search as any).hybridAlpha = 0.99;
 
-        const res = await core.recall({ query: "crimson orchard yield", userId: "test", limit: 3 });
+        const res = await core.recall({ query: "crimson orchard yield", userid: "test", limit: 3 });
         // "apple is a red fruit" is semantically closest to crimson orchard yield
         // "Banananas" is far.
 
@@ -65,7 +65,7 @@ describe('Retrieval Accuracy & Fusion Math', () => {
         (core.config.search as any).hybridAlpha = 0.01;
 
         // Query has exact keywords for the Banana memory
-        const res = await core.recall({ query: "Banananas yellow curved", userId: "test", limit: 1 });
+        const res = await core.recall({ query: "Banananas yellow curved", userid: "test", limit: 1 });
 
         expect(res.memories[0].text).toContain("Banananas");
         expect(res.metadata?.search_type).toBe("hybrid");

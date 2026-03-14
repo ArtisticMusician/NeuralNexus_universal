@@ -21,7 +21,7 @@ This document tracks the major development milestones and architectural shifts o
 
 ## Milestone 2: API Gateway Construction
 - **REST API**: Built the Fastify-based gateway.
-- **Multi-Tenancy**: Implemented `userId` partitioning for all operations.
+- **Multi-Tenancy**: Implemented `userid` partitioning for all operations.
 
 ## Milestone 1: Core Decoupling
 - **Modularity**: Extracted logic into specialized services (Decay, Embedding, Storage).
