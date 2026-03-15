@@ -9,6 +9,7 @@ qdrant/
 data/
 storage/
 .qdrant-initialized
+qdrant-server/
 
 # Binaries and archives
 bin_qdrant/
