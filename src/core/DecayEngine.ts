@@ -21,7 +21,7 @@ export class DecayEngine {
         const now = Date.now();
 
         if (!lastAccessed || lastAccessed <= 0) {
-            console.warn("Memory missing last_accessed — this indicates a write-path bug.");
+            console.warn("Memory missing last_accessed_at — this indicates a write-path bug.");
             if (createdAt && createdAt > 0) {
                 lastAccessed = createdAt;
             } else {

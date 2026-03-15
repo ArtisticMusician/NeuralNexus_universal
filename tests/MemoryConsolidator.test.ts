@@ -4,7 +4,7 @@ import { LLMConsolidator } from '../src/services/LLMConsolidator.js';
 import axios from 'axios';
 
 vi.mock('axios');
-const mockedAxios = axios as vi.Mocked<typeof axios>;
+const mockedAxios = axios as any;
 
 describe('DefaultConsolidator', () => {
   it('concatenates strings with a separator', async () => {

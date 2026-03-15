@@ -7,6 +7,7 @@ import { createInterface } from "readline";
 import { Readable, Transform, TransformCallback } from "stream";
 import { NeuralNexusCore } from "./core/NeuralNexusCore.js";
 import { normalizeMemoryConfig, MEMORY_CATEGORIES } from "./core/config.js";
+import { Schemas } from "./schemas/index.js";
 import "dotenv/config";
 
 import { existsSync } from "fs";
@@ -62,6 +63,18 @@ class LineLengthGuard extends Transform {
 
 export const server = fastify({
     logger: true,
+    ajv: {
+        customOptions: {
+            strict: true,
+            removeAdditional: false,
+            coerceTypes: false,
+            allErrors: true,
+            useDefaults: true
+        },
+        plugins: [
+            require('ajv-formats')
+        ]
+    }
 });
 
 // Configure CORS
@@ -94,6 +107,25 @@ for (const p of possiblePaths) {
 server.register(fastifyStatic, {
     root: dashboardPath,
     prefix: "/",
+});
+
+// Initialize Error Handler
+import { formatValidationError } from "./schemas/index.js";
+
+server.setErrorHandler((error: any, request, reply) => {
+    if (error.validation) {
+        // Normalize Fastify validation errors
+        const message = formatValidationError(error.validation);
+        reply.status(400).send({
+            error: "Bad Request",
+            message: `Validation failed: ${message}`,
+            details: error.validation
+        });
+        return;
+    }
+    
+    // Default fallback
+    reply.send(error);
 });
 
 // Streaming content-type parsers: pass the raw Readable through
@@ -162,13 +194,13 @@ const getuserid = (request: any): string | undefined => {
 
 // --- Endpoints ---
 
-server.post("/recall", async (request, reply) => {
+server.post("/recall", {
+    schema: {
+        body: Schemas.V1.API.RecallRequestBodySchema
+    }
+}, async (request, reply) => {
     const body = request.body as any;
     const userid = getuserid(request);
-
-    if (!body.query) {
-        return reply.status(400).send({ error: "query is required" });
-    }
 
     const results = await core.recall({
         query: body.query,
@@ -180,13 +212,13 @@ server.post("/recall", async (request, reply) => {
     return results;
 });
 
-server.post("/store", async (request, reply) => {
+server.post("/store", {
+    schema: {
+        body: Schemas.V1.API.StoreRequestBodySchema
+    }
+}, async (request, reply) => {
     const body = request.body as any;
     const userid = getuserid(request);
-
-    if (!body.text) {
-        return reply.status(400).send({ error: "text is required" });
-    }
 
     await core.store({
         text: body.text,
@@ -198,12 +230,12 @@ server.post("/store", async (request, reply) => {
     return reply.status(201).send({ status: "stored" });
 });
 
-server.post("/reinforce", async (request, reply) => {
-    const body = request.body as any;
-
-    if (!body.memory_id && !body.memoryId) {
-        return reply.status(400).send({ error: "memory_id is required" });
+server.post("/reinforce", {
+    schema: {
+        body: Schemas.V1.API.ReinforceRequestBodySchema
     }
+}, async (request, reply) => {
+    const body = request.body as any;
 
     await core.reinforce({
         memoryId: body.memory_id || body.memoryId,
@@ -213,8 +245,12 @@ server.post("/reinforce", async (request, reply) => {
     return { status: "reinforced" };
 });
 
-server.get("/audit", async (request) => {
-    const query = request.query as { limit?: string };
+server.get("/audit", {
+    schema: {
+        querystring: Schemas.V1.API.AuditQueryStringSchema
+    }
+}, async (request) => {
+    const query = request.query as any;
     const limit = query.limit ? parseInt(query.limit) : 50;
     return await core.getAuditLogs(limit);
 });
@@ -228,7 +264,11 @@ server.get("/categories", async () => {
 });
 
 // Admin Endpoints
-server.get("/admin/export", async (request, reply) => {
+server.get("/admin/export", {
+    schema: {
+        querystring: Schemas.V1.API.ExportQueryStringSchema
+    }
+}, async (request, reply) => {
     const query = request.query as { userid?: string };
     const memories = await core.exportMemories(query.userid);
 

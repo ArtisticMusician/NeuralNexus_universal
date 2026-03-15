@@ -79,7 +79,7 @@ export function createTelegramBot(core: NeuralNexusCore) {
     // ──────────────────────────────────────────────
     const storeMatch = text.match(/^Store as (\w+)(?::\s*(.+))?$/is);
     if (storeMatch) {
-      const category = storeMatch[1].toLowerCase();
+      const category = storeMatch[1].toLowerCase() as any;
       const inlineContent = storeMatch[2]?.trim();
 
       if (inlineContent) {
@@ -102,7 +102,7 @@ export function createTelegramBot(core: NeuralNexusCore) {
     // ──────────────────────────────────────────────
     // 2. If a category was previously selected via button, apply it now.
     // ──────────────────────────────────────────────
-    const category = pendingCategory.get(ctx.from.id);
+    const category = pendingCategory.get(ctx.from.id) as any;
     if (category) {
       pendingCategory.delete(ctx.from.id);
       try {

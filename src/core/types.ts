@@ -6,8 +6,8 @@ export interface MemoryEntry {
   category: MemoryCategory;
   vector: number[];
   metadata: {
-    last_accessed: number;
-    created_at: number;
+    last_accessed_at: string;
+    created_at: string;
     strength: number;
     source?: string;
     [key: string]: any;

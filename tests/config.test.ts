@@ -16,7 +16,9 @@ describe('config', () => {
     const config = normalizeMemoryConfig({});
     expect(config.embedding.model).toBe('Xenova/bge-small-en-v1.5');
     expect(config.embedding.device).toBe('cuda');
-    expect(config.qdrant.url).toBe('http://localhost:6333');
+    expect(config.vectorStore.provider).toBe('qdrant');
+    expect(config.vectorStore.url).toBe('http://localhost:6333');
+    expect(config.qdrant!.url).toBe('http://localhost:6333');
     expect(config.autoCapture).toBe(true);
     expect(config.consolidation).toBe(true);
     expect(config.consolidationThreshold).toBe(4);
@@ -47,9 +49,13 @@ describe('config', () => {
     const config = normalizeMemoryConfig(input);
     expect(config.embedding.model).toBe('my-custom-model');
     expect(config.embedding.device).toBe('cpu');
-    expect(config.qdrant.url).toBe('https://qdrant.example.com');
-    expect(config.qdrant.collection).toBe('custom_memories');
-    expect(config.qdrant.apiKey).toBe('secret-api-key');
+    expect(config.vectorStore.url).toBe('https://qdrant.example.com');
+    expect(config.vectorStore.collection).toBe('custom_memories');
+    expect(config.vectorStore.apiKey).toBe('secret-api-key');
+    // Backward-compat qdrant block should mirror vectorStore
+    expect(config.qdrant!.url).toBe('https://qdrant.example.com');
+    expect(config.qdrant!.collection).toBe('custom_memories');
+    expect(config.qdrant!.apiKey).toBe('secret-api-key');
     expect(config.autoCapture).toBe(false);
     expect(config.autoRecall).toBe(false);
     expect(config.consolidation).toBe(false);
@@ -74,8 +80,10 @@ describe('config', () => {
     };
 
     const config = normalizeMemoryConfig(input);
-    expect(config.qdrant.url).toBe('http://test-qdrant:6333');
-    expect(config.qdrant.apiKey).toBe('env-api-key');
+    expect(config.vectorStore.url).toBe('http://test-qdrant:6333');
+    expect(config.vectorStore.apiKey).toBe('env-api-key');
+    expect(config.qdrant!.url).toBe('http://test-qdrant:6333');
+    expect(config.qdrant!.apiKey).toBe('env-api-key');
     expect(config.replacementLog.sqlitePath).toBe('/env/data.sqlite');
   });
 
@@ -86,6 +94,7 @@ describe('config', () => {
       },
     };
     const config = normalizeMemoryConfig(input);
-    expect(config.qdrant.url).toBe('http://localhost:6333'); // Reverts to default if after resolving it's empty
+    expect(config.vectorStore.url).toBe('http://localhost:6333'); // Reverts to default if after resolving it's empty
+    expect(config.qdrant!.url).toBe('http://localhost:6333');
   });
 });

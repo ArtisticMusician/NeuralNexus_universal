@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { NeuralNexusCore } from '../src/core/NeuralNexusCore.js';
 import { normalizeMemoryConfig } from '../src/core/config.js';
+import { QdrantClient } from '@qdrant/js-client-rest';
 
 describe('Retrieval Accuracy & Fusion Math', () => {
     let core: NeuralNexusCore;
@@ -8,7 +9,7 @@ describe('Retrieval Accuracy & Fusion Math', () => {
     beforeAll(async () => {
         const testCollection = 'accuracy_test_collection';
         const config = normalizeMemoryConfig({
-            qdrant: { url: 'http://localhost:6333', collection: testCollection },
+            vectorStore: { provider: 'qdrant', url: 'http://127.0.0.1:6333', collection: testCollection },
             thresholds: { recall: 0.001, similarity: 0.8 },
             search: { limit: 10, rrfK: 60, hybridAlpha: 0.5 } // Equal weight for testing
         });
@@ -17,8 +18,8 @@ describe('Retrieval Accuracy & Fusion Math', () => {
 
         // Clean start
         try {
-            const storage = (core as any).storage;
-            await storage.client.deleteCollection(testCollection);
+            const qdrantClient = new QdrantClient({ url: 'http://127.0.0.1:6333', checkCompatibility: false });
+            await qdrantClient.deleteCollection(testCollection);
         } catch (e) { }
 
         await core.initialize();

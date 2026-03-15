@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { StorageService } from '../src/core/StorageService.js';
+import { QdrantVectorStore } from '../src/core/StorageService.js';
 
 describe('StorageService', () => {
-  let storageService: StorageService;
+  let storageService: QdrantVectorStore;
   let client: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     // Re-instantiate service for each test
-    storageService = new StorageService('http://localhost:6333', 'test_collection', 'test_key');
+    storageService = new QdrantVectorStore('http://localhost:6333', 'test_collection', 'test_key');
     
     // Mock the Qdrant client methods
     client = {
@@ -70,7 +70,7 @@ describe('StorageService', () => {
     // Mock vector search results
     client.search.mockResolvedValue([{ id: 1, score: 0.9, payload: { text: 'test' } }]);
 
-    const results = await storageService.find(vector, limit);
+    const results = await storageService.find({ vector, limit });
 
     expect(client.search).toHaveBeenCalledWith('test_collection', {
       vector,
@@ -89,7 +89,7 @@ describe('StorageService', () => {
     const userid = 'user-123';
     client.search.mockResolvedValue([{ id: 1, score: 0.9, payload: { text: 'test' } }]);
 
-    await storageService.find(vector, limit, userid);
+    await storageService.find({ vector, limit, userid });
 
     expect(client.search).toHaveBeenCalledWith('test_collection', {
       vector,
@@ -115,7 +115,7 @@ describe('StorageService', () => {
         next_page_offset: null
     });
 
-    const results = await storageService.find(vector, limit, undefined, query);
+    const results = await storageService.find({ vector, limit, query });
 
     // Verify vector search call
     expect(client.search).toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe('StorageService', () => {
         next_page_offset: null
     });
 
-    const results = await storageService.find(vector, 5, undefined, query);
+    const results = await storageService.find({ vector, limit: 5, query });
 
     // K2 should be ranked higher due to higher TF overlap (3/3 vs 1/3)
     expect(results[0].id).toBe('k2');
@@ -168,7 +168,7 @@ describe('StorageService', () => {
     client.search.mockResolvedValue([]);
     client.scroll.mockResolvedValue({ points: [], next_page_offset: null });
 
-    await storageService.find(vector, limit, userid, query);
+    await storageService.find({ vector, limit, userid, query });
 
     expect(client.scroll).toHaveBeenCalledWith('test_collection', expect.objectContaining({
       filter: {
@@ -201,7 +201,7 @@ describe('StorageService', () => {
     await storageService.updateAccessTime(id);
 
     expect(client.setPayload).toHaveBeenCalledWith('test_collection', {
-      payload: { last_accessed: now },
+      payload: { last_accessed_at: new Date(now).toISOString() },
       points: [id],
     });
 

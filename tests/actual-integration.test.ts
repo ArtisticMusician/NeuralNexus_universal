@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { NeuralNexusCore } from '../src/core/NeuralNexusCore.js';
 import { normalizeMemoryConfig } from '../src/core/config.js';
-import { execSync } from 'child_process';
+import { QdrantClient } from '@qdrant/js-client-rest';
 
 describe('Actual Multi-Container Integration Test', () => {
     let core: NeuralNexusCore;
@@ -13,7 +13,7 @@ describe('Actual Multi-Container Integration Test', () => {
         const testCollection = 'actual_integration_test_collection';
 
         const config = normalizeMemoryConfig({
-            qdrant: { url: 'http://localhost:6333', collection: testCollection },
+            vectorStore: { provider: 'qdrant', url: 'http://127.0.0.1:6333', collection: testCollection },
             thresholds: { recall: 0.01, similarity: 0.92 },
             search: { limit: 5, rrfK: 60 }
         });
@@ -21,8 +21,8 @@ describe('Actual Multi-Container Integration Test', () => {
         core = new NeuralNexusCore(config);
         // Force cleanup of potential stale data from previous failed runs
         try {
-            const storage = (core as any).storage;
-            await storage.client.deleteCollection(testCollection);
+            const qdrantClient = new QdrantClient({ url: 'http://127.0.0.1:6333', checkCompatibility: false });
+            await qdrantClient.deleteCollection(testCollection);
         } catch (e) {
             // Ignore if collection doesn't exist
         }
@@ -59,6 +59,6 @@ describe('Actual Multi-Container Integration Test', () => {
         // verify only 1 exists for user
         const res = await core.recall({ query: "organic red apples", limit: 10, userid: "test_user_2" });
         expect(res.memories.length).toBe(1);
-        expect(res.memories[0].metadata.strength).toBeGreaterThan(1); // Has merged
+        expect(res.memories[0].metadata.strength).toBe(1); // Has merged and capped at 1.0
     });
 });

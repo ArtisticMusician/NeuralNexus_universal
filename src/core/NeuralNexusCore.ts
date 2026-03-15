@@ -1,5 +1,6 @@
 import { EmbeddingService } from "./EmbeddingService.js";
-import { StorageService } from "./StorageService.js";
+import { type IVectorStore } from "./IVectorStore.js";
+import { createVectorStore } from "./vectorStoreFactory.js";
 import { DecayEngine } from "./DecayEngine.js";
 import { ReplacementAuditService } from "./ReplacementAuditService.js";
 import { CategoryService } from "./CategoryService.js";
@@ -15,6 +16,11 @@ import {
 } from "./types.js";
 import { v4 as uuidv4 } from "uuid";
 import AsyncLock from "async-lock";
+import { ajv, formatValidationError } from "../schemas/index.js";
+import { MemoryEntrySchema, AuditEntrySchema } from "../schemas/v1/internal.js";
+
+const validateMemoryEntry = ajv.compile(MemoryEntrySchema);
+const validateAuditEntry = ajv.compile(AuditEntrySchema);
 
 /**
  * NeuralNexusCore: The central Orchestration Layer.
@@ -23,16 +29,16 @@ import AsyncLock from "async-lock";
  */
 export class NeuralNexusCore {
     private embedding: EmbeddingService;
-    private storage: StorageService;
+    private storage: IVectorStore;
     private decay: DecayEngine;
     private audit: ReplacementAuditService;
     private categoryService: CategoryService;
     private consolidator: IMemoryConsolidator;
     public lock: AsyncLock;
 
-    constructor(public config: MemoryConfig) {
+    constructor(public config: MemoryConfig, options?: { vectorStore?: IVectorStore }) {
         this.embedding = new EmbeddingService(config.embedding.model, config.embedding.device);
-        this.storage = new StorageService(config.qdrant.url, config.qdrant.collection, config.qdrant.apiKey);
+        this.storage = options?.vectorStore ?? createVectorStore(config);
         this.decay = new DecayEngine();
         this.audit = new ReplacementAuditService(config.replacementLog.enabled, config.replacementLog.sqlitePath);
         this.categoryService = new CategoryService();
@@ -67,14 +73,14 @@ export class NeuralNexusCore {
     async recall(request: RecallRequest): Promise<RecallResponse> {
         const userid = request.userid || "anonymous";
         const vector = await this.embedding.createVector(request.query);
-        const results = await this.storage.find(
+        const results = await this.storage.find({
             vector,
-            request.limit || this.config.search.limit,
+            limit: request.limit || this.config.search.limit,
             userid,
-            request.query,
-            this.config.search.rrfK,
-            this.config.search.hybridAlpha ?? 0.7
-        );
+            query: request.query,
+            rrfK: this.config.search.rrfK,
+            alpha: this.config.search.hybridAlpha ?? 0.7
+        });
 
         // Filter by recall threshold
         const countBeforeFiltering = results.length;
@@ -90,10 +96,11 @@ export class NeuralNexusCore {
 
             const decayedScore = this.decay.calculateScore(
                 score,
-                payload.last_accessed,
+                payload.last_accessed_at ? new Date(payload.last_accessed_at).getTime() : (payload.last_accessed || 0),
                 lambda,
                 payload.strength ?? 1,
-                this.config.decay.timeUnit || "ms"
+                this.config.decay.timeUnit || "ms",
+                payload.created_at ? new Date(payload.created_at).getTime() : 0
             );
 
             return {
@@ -136,7 +143,7 @@ export class NeuralNexusCore {
         const userid = request.userid || "anonymous";
 
         await this.lock.acquire(`store:${userid}`, async () => {
-            const existing = await this.storage.find(vector, 1, userid);
+            const existing = await this.storage.find({ vector, limit: 1, userid });
             const threshold = this.config.thresholds.similarity;
 
             const match = existing[0];
@@ -148,15 +155,25 @@ export class NeuralNexusCore {
 
             const id = uuidv4();
             const payload = {
+                id,
                 text: request.text,
                 category: request.category || this.detectCategory(request.text),
-                last_accessed: Date.now(),
-                created_at: Date.now(),
+                last_accessed_at: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
                 strength: 1,
                 userid: userid,
-                ...request.metadata
+                metadata: request.metadata
             };
 
+            const isValid = validateMemoryEntry(payload);
+            if (!isValid) {
+                const err = formatValidationError(validateMemoryEntry.errors);
+                throw new Error(`Internal Validation Failed - Memory Entry: ${err}`);
+            }
+
+            // Exclude generated ID/timestamps from the pure payload if storage API diverges, 
+            // but for Qdrant payload acts as full metadata.
             await this.storage.store(id, vector, payload);
         });
     }
@@ -172,7 +189,7 @@ export class NeuralNexusCore {
             const currentStrength = (point.payload as any).strength || 1;
             await this.storage.updatePayload(request.memoryId, {
                 strength: currentStrength + (request.strengthAdjustment || 0.05),
-                last_accessed: Date.now()
+                last_accessed_at: new Date().toISOString()
             });
         });
     }
@@ -197,14 +214,33 @@ export class NeuralNexusCore {
         for (let i = 0; i < memories.length; i += CHUNK_SIZE) {
             const chunk = memories.slice(i, i + CHUNK_SIZE);
             const points = chunk.map((m) => {
-                const payload = { ...m.payload, userid: m.payload?.userid || "anonymous" };
+                const entryId = m.id || uuidv4();
+                const payload = {
+                    id: entryId,
+                    text: m.payload?.text || "",
+                    category: m.payload?.category || "other",
+                    last_accessed_at: new Date(m.payload?.last_accessed || Date.now()).toISOString(),
+                    created_at: new Date(m.payload?.created_at || Date.now()).toISOString(),
+                    updated_at: new Date().toISOString(),
+                    strength: m.payload?.strength || 1,
+                    userid: m.payload?.userid || "anonymous",
+                    metadata: {} 
+                };
+                
+                // For batch imports, we warn rather than throw to salvage the rest.
+                const isValid = validateMemoryEntry(payload);
+                if (!isValid) {
+                     console.warn(`Skipping malformed imported memory ${entryId}:`, formatValidationError(validateMemoryEntry.errors));
+                     return null;
+                }
+
                 return {
-                    id: m.id || uuidv4(),
+                    id: entryId,
                     vector: m.vector || [],
                     payload,
                 };
-            });
-            await this.storage.storeBatch(points);
+            }).filter(p => p !== null);
+            await this.storage.storeBatch(points as any[]);
         }
     }
 
@@ -249,14 +285,14 @@ export class NeuralNexusCore {
 
         const results = await Promise.all(memories.map(async (m: any) => {
             if (method === "substring") {
-                return !lowerHistory.includes(m.text.toLowerCase()) ? m : null;
+                return !lowerHistory.includes((m.text as string).toLowerCase()) ? m : null;
             }
 
             if (method === "jaccard") {
-                const memoryTokens = new Set(m.text.toLowerCase().split(/\s+/).filter((t: string) => t.length > 3));
+                const memoryTokens: Set<string> = new Set((m.text as string).toLowerCase().split(/\s+/).filter((t: string) => t.length > 3));
                 let intersection = 0;
-                memoryTokens.forEach(t => { if (historyTokens!.has(t)) intersection++; });
-                const unionSize = new Set([...historyTokens!, ...memoryTokens]).size;
+                memoryTokens.forEach((t: string) => { if (historyTokens!.has(t)) intersection++; });
+                const unionSize = new Set<string>([...historyTokens!, ...memoryTokens]).size;
                 const jaccard = unionSize === 0 ? 0 : intersection / unionSize;
                 return jaccard < threshold ? m : null;
             }
@@ -392,24 +428,43 @@ export class NeuralNexusCore {
             finalVector = await this.embedding.createVector(finalText);
         }
 
-        await this.storage.store(id, finalVector, {
-            ...bestMatch.payload,
+        const updatedPayload = {
+            id,
             text: finalText,
             category: request.category || bestMatch.payload.category,
-            last_accessed: Date.now(),
-            created_at: bestMatch.payload.created_at || Date.now(),
-            strength: (bestMatch.payload.strength || 1) + 0.1,
+            last_accessed_at: new Date().toISOString(),
+            created_at: bestMatch.payload.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            strength: Math.min((bestMatch.payload.strength || 1) + 0.1, 1),
             userid: userid,
-            ...request.metadata
-        });
+            metadata: request.metadata || {}
+        };
 
-        await this.audit.logReplacement({
-            memoryId: id,
-            category: request.category || bestMatch.payload.category,
-            oldText: bestMatch.payload.text,
-            newText: finalText,
-            similarityScore: bestMatch.payload?._original_score ?? bestMatch.score,
-            replacedAt: Date.now()
-        });
+        const isMemValid = validateMemoryEntry(updatedPayload);
+        if (!isMemValid) throw new Error("Merged memory validation failed: " + formatValidationError(validateMemoryEntry.errors));
+
+        await this.storage.store(id, finalVector, updatedPayload);
+
+        const auditData = {
+            id: 0, // SQLite auto-increments, 0 is ignored or temporary for schema check
+            old_text: bestMatch.payload.text,
+            new_text: finalText,
+            similarity_score: bestMatch.payload?._original_score ?? bestMatch.score ?? 0,
+            timestamp: new Date().toISOString(),
+            userid: userid
+        };
+
+        if (validateAuditEntry(auditData)) {
+            await this.audit.logReplacement({
+                memoryId: id,
+                category: request.category || bestMatch.payload.category,
+                oldText: bestMatch.payload.text,
+                newText: finalText,
+                similarityScore: bestMatch.payload?._original_score ?? bestMatch.score ?? 0,
+                replacedAt: Date.now()
+            });
+        } else {
+             console.warn("Audit Log Validation Failed:", formatValidationError(validateAuditEntry.errors));
+        }
     }
 }

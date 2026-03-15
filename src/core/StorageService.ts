@@ -1,13 +1,21 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
+import { type IVectorStore, type VectorPoint, type FindQuery } from "./IVectorStore.js";
 
-export class StorageService {
+export class QdrantVectorStore implements IVectorStore {
     private client: QdrantClient;
+    private _vectorSize: number | null = null;
 
     constructor(private url: string, private collection: string, apiKey?: string) {
         this.client = new QdrantClient({ url, apiKey, checkCompatibility: false });
     }
 
+    get vectorSize(): number | null {
+        return this._vectorSize;
+    }
+
     async initialize(vectorSize: number) {
+        this._vectorSize = vectorSize;
+
         const collections = await this.client.getCollections();
         if (!collections.collections.some(c => c.name === this.collection)) {
             await this.client.createCollection(this.collection, {
@@ -35,7 +43,7 @@ export class StorageService {
             const info = await this.client.getCollection(this.collection);
             const existingSize = (info.config.params.vectors as any).size;
             if (existingSize !== vectorSize) {
-                throw new Error(`[StorageService] Dimension mismatch: Collection '${this.collection}' has size ${existingSize}, but model requires ${vectorSize}.`);
+                throw new Error(`[QdrantVectorStore] Dimension mismatch: Collection '${this.collection}' has size ${existingSize}, but model requires ${vectorSize}.`);
             }
         }
     }
@@ -44,9 +52,20 @@ export class StorageService {
         await this.client.upsert(this.collection, { points: [{ id, vector, payload }] });
     }
 
-    async getPoint(id: string) {
+    async getPoint(id: string): Promise<VectorPoint | null> {
         const points = await this.client.retrieve(this.collection, { ids: [id], with_payload: true });
-        return points.length > 0 ? points[0] : null;
+        if (points.length === 0) return null;
+        const p = points[0];
+        return { id: p.id as string, vector: (p as any).vector ?? [], payload: (p.payload ?? {}) as Record<string, any> };
+    }
+
+    async delete(id: string): Promise<boolean> {
+        try {
+            await this.client.delete(this.collection, { points: [id] });
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     /**
@@ -54,7 +73,9 @@ export class StorageService {
      * Pass 1: Semantic Vector Search
      * Pass 2: Native Full-Text Search (BM25-like via Qdrant)
      */
-    async find(vector: number[], limit: number, userid: string = "anonymous", query?: string, rrfK: number = 60, alpha: number = 0.7) {
+    async find(query: FindQuery): Promise<VectorPoint[]> {
+        const { vector, limit, userid = "anonymous", query: textQuery, rrfK = 60, alpha = 0.7 } = query;
+
         try {
             const filter = { must: [{ key: "userid", match: { value: userid } }] };
 
@@ -66,30 +87,14 @@ export class StorageService {
             // Pass 2: Keyword (Native Qdrant Text Search)
             let textPromise: Promise<any[]> = Promise.resolve([]);
             
-            if (query) {
-                // We use the 'scroll' API with a text filter to simulate a keyword search 
-                // since Qdrant doesn't have a dedicated "rank by text relevance" endpoint 
-                // without vectors, but we can filter by it.
-                // 
-                // HOWEVER, for true hybrid search in Qdrant without using a second vector model (sparse vectors),
-                // we rely on the fact that we can filter. To get a "score", we unfortunately still have to 
-                // do some client-side work OR use sparse vectors. 
-                //
-                // Given the constraints (no sparse model loaded), we will perform a search
-                // using the vector but heavily filtered by text, OR just scroll with text match.
-                //
-                // Qdrant 'scroll' does not return scores. 
-                // To get a "score" for text match without sparse vectors, we must use the client-side scoring 
-                // we had before, BUT we must rely on Qdrant to do the heavy lifting of *filtering*.
-                
+            if (textQuery) {
                 const textFilter = {
                     must: [
                         { key: "userid", match: { value: userid } },
-                        { key: "text", match: { text: query } } // Native full-text match
+                        { key: "text", match: { text: textQuery } }
                     ]
                 };
 
-                // We fetch more candidates from the text-match side
                 textPromise = this.client.scroll(this.collection, {
                     filter: textFilter,
                     limit: limit * 2,
@@ -106,10 +111,8 @@ export class StorageService {
             });
 
             // Score the text results (Synthetic TF)
-            // Since Qdrant scroll doesn't return a score, we calculate a basic overlap score.
-            // This is much faster now because we only process items that ALREADY matched the index.
-            if (query && textResults.length > 0) {
-                const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+            if (textQuery && textResults.length > 0) {
+                const queryTerms = textQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2);
                 textResults.forEach((res: any) => {
                     const text = (res.payload?.text || "").toLowerCase();
                     let hitCount = 0;
@@ -118,11 +121,9 @@ export class StorageService {
                     const synthetic = hitCount / (queryTerms.length || 1);
                     res._local_score = synthetic;
                     
-                    // Store original score for metadata
                     res.payload = res.payload || {};
                     res.payload._original_score = synthetic;
                 });
-                // Sort by our synthetic score
                 textResults.sort((a: any, b: any) => b._local_score - a._local_score);
             }
 
@@ -143,7 +144,7 @@ export class StorageService {
             };
 
             applyRRF(vectorResults, alpha);
-            if (query && textResults.length > 0) {
+            if (textQuery && textResults.length > 0) {
                 applyRRF(textResults, 1 - alpha);
             }
 
@@ -161,12 +162,12 @@ export class StorageService {
                 });
 
         } catch (err) {
-            console.error(`[StorageService] Search failed: ${err}`);
+            console.error(`[QdrantVectorStore] Search failed: ${err}`);
             return [];
         }
     }
 
-    async scrollAll(userid: string = "anonymous"): Promise<any[]> {
+    async scrollAll(userid: string = "anonymous"): Promise<VectorPoint[]> {
         const filter = { must: [{ key: "userid", match: { value: userid } }] };
         const allPoints: any[] = [];
         let nextOffset: string | number | Record<string, unknown> | null | undefined = undefined;
@@ -197,6 +198,18 @@ export class StorageService {
     }
 
     async updateAccessTime(id: string) {
-        await this.updatePayload(id, { last_accessed: Date.now() });
+        await this.updatePayload(id, { last_accessed_at: new Date().toISOString() });
+    }
+
+    async healthCheck(): Promise<boolean> {
+        try {
+            await this.client.getCollections();
+            return true;
+        } catch {
+            return false;
+        }
     }
 }
+
+/** @deprecated Use QdrantVectorStore instead. */
+export const StorageService = QdrantVectorStore;

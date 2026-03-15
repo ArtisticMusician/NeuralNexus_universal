@@ -1,8 +1,15 @@
-export class InMemoryStorageFake {
+import { type IVectorStore, type VectorPoint, type FindQuery } from "../../src/core/IVectorStore.js";
+
+export class InMemoryStorageFake implements IVectorStore {
   private points: any[] = [];
+  private _vectorSize: number | null = null;
 
   constructor() {
     this.points = [];
+  }
+
+  get vectorSize(): number | null {
+    return this._vectorSize;
   }
 
   // --- Helper Methods (Internal) ---
@@ -19,9 +26,11 @@ export class InMemoryStorageFake {
     return dot / (Math.sqrt(m1) * Math.sqrt(m2));
   }
 
-  // --- StorageService Interface (For NeuralNexusCore tests) ---
+  // --- IVectorStore Implementation ---
 
-  async initialize(dim: number) {}
+  async initialize(dim: number) {
+    this._vectorSize = dim;
+  }
 
   async store(id: string, vector: number[], payload: any) {
     this.points = this.points.filter(p => p.id !== id);
@@ -34,11 +43,19 @@ export class InMemoryStorageFake {
     }
   }
 
-  async getPoint(id: string) {
+  async getPoint(id: string): Promise<VectorPoint | null> {
     return this.points.find(p => p.id === id) || null;
   }
 
-  async find(vector: number[], limit: number, userid: string = "anonymous", query?: string, rrfK: number = 60) {
+  async delete(id: string): Promise<boolean> {
+    const len = this.points.length;
+    this.points = this.points.filter(p => p.id !== id);
+    return this.points.length < len;
+  }
+
+  async find(query: FindQuery): Promise<VectorPoint[]> {
+    const { vector, limit, userid = "anonymous", query: textQuery, rrfK = 60 } = query;
+
     let filtered = this.points.filter(p => p.payload.userid === userid);
 
     const vectorPass = filtered.map(p => ({
@@ -47,8 +64,8 @@ export class InMemoryStorageFake {
     })).sort((a, b) => b.score - a.score);
 
     let keywordPass: any[] = [];
-    if (query) {
-      const q = query.toLowerCase();
+    if (textQuery) {
+      const q = textQuery.toLowerCase();
       keywordPass = filtered.filter(p => 
         (p.payload.text || "").toLowerCase().includes(q)
       ).map(p => ({
@@ -73,7 +90,7 @@ export class InMemoryStorageFake {
     };
 
     applyRRF(vectorPass);
-    if (query) applyRRF(keywordPass);
+    if (textQuery) applyRRF(keywordPass);
 
     return Object.values(scores)
       .sort((a, b) => b.score - a.score)
@@ -94,40 +111,7 @@ export class InMemoryStorageFake {
       await this.updatePayload(id, { last_accessed: Date.now() });
   }
 
-  // --- Qdrant Client Interface (For StorageService tests) ---
-
-  async getCollections() { return { collections: [] }; }
-  async getCollection() { return { config: { params: { vectors: { size: 384 } } } }; }
-  async createCollection() {}
-  async createPayloadIndex() {}
-  async upsert(collection: string, options: any) {
-    for (const p of options.points) {
-        await this.store(p.id, p.vector, p.payload);
-    }
-  }
-  async retrieve(collection: string, options: { ids: string[] }) {
-      return this.points.filter(p => options.ids.includes(p.id));
-  }
-  async search(collection: string, options: any) {
-    const userid = options.filter?.must?.find((m: any) => m.key === 'userid')?.match?.value || "anonymous";
-    // For raw search, we don't want RRF, just the vector result
-    return (this.points.filter(p => p.payload.userid === userid).map(p => ({
-        ...p,
-        score: this.cosineSim(options.vector, p.vector)
-    })).sort((a, b) => b.score - a.score).slice(0, options.limit));
-  }
-  async scroll(collection: string, options: any) {
-      const userid = options.filter?.must?.find((m: any) => m.key === 'userid')?.match?.value || "anonymous";
-      const textQuery = options.filter?.must?.find((m: any) => m.key === 'text')?.match?.text;
-      let points = this.points.filter(p => p.payload.userid === userid);
-      if (textQuery) {
-          points = points.filter(p => (p.payload.text || "").toLowerCase().includes(textQuery.toLowerCase()));
-      }
-      return { points: points.slice(0, options.limit || 100), next_page_offset: null };
-  }
-  async setPayload(collection: string, options: any) {
-      for (const id of options.points) {
-          await this.updatePayload(id, options.payload);
-      }
+  async healthCheck(): Promise<boolean> {
+    return true;
   }
 }

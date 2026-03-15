@@ -1,11 +1,20 @@
 import { type MemoryCategory } from "./types.js";
 
+export type VectorStoreProvider = "qdrant";
+
 export type MemoryConfig = {
   embedding: {
     model: string;
     device: "cuda" | "cpu";
   };
-  qdrant: {
+  vectorStore: {
+    provider: VectorStoreProvider;
+    url: string;
+    collection: string;
+    apiKey?: string;
+  };
+  /** @deprecated Use vectorStore instead. Kept for backward compatibility. */
+  qdrant?: {
     url: string;
     collection: string;
     apiKey?: string;
@@ -67,16 +76,54 @@ function resolveEnvVars(value: string): string {
 export function normalizeMemoryConfig(input: unknown): MemoryConfig {
   const cfg = asObject(input) ?? {};
   const embedding = asObject(cfg.embedding) ?? {};
-  const qdrant = asObject(cfg.qdrant) ?? {};
+  const vectorStoreRaw = asObject(cfg.vectorStore) ?? {};
+  const qdrantLegacy = asObject(cfg.qdrant) ?? {};
   const replacementLog = asObject(cfg.replacementLog) ?? {};
   const thresholds = asObject(cfg.thresholds) ?? {};
   const decay = asObject(cfg.decay) ?? {};
   const search = asObject(cfg.search) ?? {};
 
   const rawModel = typeof embedding.model === "string" ? embedding.model.trim() : "";
-  const rawUrl = typeof qdrant.url === "string" ? resolveEnvVars(qdrant.url).trim() : "";
-  const rawCollection = typeof qdrant.collection === "string" ? qdrant.collection.trim() : "";
-  const rawApiKey = typeof qdrant.apiKey === "string" ? resolveEnvVars(qdrant.apiKey).trim() : "";
+
+  // --- Vector Store config (with backward-compatible qdrant block) ---
+  let vectorStore: MemoryConfig["vectorStore"];
+
+  const hasVectorStore = Object.keys(vectorStoreRaw).length > 0;
+  const hasLegacyQdrant = Object.keys(qdrantLegacy).length > 0;
+
+  if (hasVectorStore) {
+    const provider = typeof vectorStoreRaw.provider === "string" ? vectorStoreRaw.provider.trim() : "qdrant";
+    const url = typeof vectorStoreRaw.url === "string" ? resolveEnvVars(vectorStoreRaw.url).trim() : "";
+    const collection = typeof vectorStoreRaw.collection === "string" ? vectorStoreRaw.collection.trim() : "";
+    const apiKey = typeof vectorStoreRaw.apiKey === "string" ? resolveEnvVars(vectorStoreRaw.apiKey).trim() : "";
+
+    vectorStore = {
+      provider: provider as VectorStoreProvider,
+      url: url || DEFAULT_QDRANT_URL,
+      collection: collection || DEFAULT_COLLECTION,
+      apiKey: apiKey || undefined,
+    };
+  } else {
+    // Backward compatibility: map legacy `qdrant` block → `vectorStore`
+    if (hasLegacyQdrant) {
+      console.warn(
+        "[NeuralNexus] Config deprecation: The 'qdrant' config block is deprecated. " +
+        "Please migrate to 'vectorStore: { provider: \"qdrant\", url, collection, apiKey }'."
+      );
+    }
+
+    const rawUrl = typeof qdrantLegacy.url === "string" ? resolveEnvVars(qdrantLegacy.url).trim() : "";
+    const rawCollection = typeof qdrantLegacy.collection === "string" ? qdrantLegacy.collection.trim() : "";
+    const rawApiKey = typeof qdrantLegacy.apiKey === "string" ? resolveEnvVars(qdrantLegacy.apiKey).trim() : "";
+
+    vectorStore = {
+      provider: "qdrant",
+      url: rawUrl || DEFAULT_QDRANT_URL,
+      collection: rawCollection || DEFAULT_COLLECTION,
+      apiKey: rawApiKey || undefined,
+    };
+  }
+
   const rawSqlitePath =
     typeof replacementLog.sqlitePath === "string"
       ? resolveEnvVars(replacementLog.sqlitePath).trim()
@@ -87,10 +134,12 @@ export function normalizeMemoryConfig(input: unknown): MemoryConfig {
       model: rawModel || DEFAULT_MODEL,
       device: embedding.device === "cpu" ? "cpu" : "cuda",
     },
+    vectorStore,
+    // Keep legacy qdrant block on the output for any external consumers
     qdrant: {
-      url: rawUrl || DEFAULT_QDRANT_URL,
-      collection: rawCollection || DEFAULT_COLLECTION,
-      apiKey: rawApiKey || undefined,
+      url: vectorStore.url,
+      collection: vectorStore.collection,
+      apiKey: vectorStore.apiKey,
     },
     autoCapture: cfg.autoCapture !== false,
     autoRecall: cfg.autoRecall !== false,

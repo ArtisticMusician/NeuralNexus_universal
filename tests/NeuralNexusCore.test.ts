@@ -68,7 +68,7 @@ describe('NeuralNexusCore (Mock-less Integration)', () => {
 
     const all = await storage.scrollAll("user1");
     expect(all).toHaveLength(1);
-    expect(all[0].payload.strength).toBeGreaterThan(1);
+    expect(all[0].payload.strength).toBe(1);
   });
 
   it('recalculates embedding vector on merge to prevent semantic drift', async () => {

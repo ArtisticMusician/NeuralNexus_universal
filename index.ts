@@ -1,10 +1,15 @@
 // Core Exports
 export { NeuralNexusCore } from "./src/core/NeuralNexusCore.js";
 export { EmbeddingService } from "./src/core/EmbeddingService.js";
-export { StorageService } from "./src/core/StorageService.js";
+export { QdrantVectorStore, StorageService } from "./src/core/StorageService.js";
 export { DecayEngine } from "./src/core/DecayEngine.js";
 export { ReplacementAuditService } from "./src/core/ReplacementAuditService.js";
 export { normalizeMemoryConfig } from "./src/core/config.js";
+export { createVectorStore } from "./src/core/vectorStoreFactory.js";
+
+// Interface & Type Exports
+export type { IVectorStore, VectorPoint, FindQuery } from "./src/core/IVectorStore.js";
+export type { MemoryConfig, VectorStoreProvider } from "./src/core/config.js";
 
 // Type Exports
 export * from "./src/core/types.js";
@@ -18,7 +23,7 @@ import { normalizeMemoryConfig } from "./src/core/config.js";
 const neuralNexusPlugin = {
   id: "neural_nexus",
   name: "Neural Nexus",
-  description: "Qdrant-backed universal long-term memory",
+  description: "Vector-store-backed universal long-term memory",
   kind: "memory" as const,
 
   async register(api: OpenClawPluginApi): Promise<void> {
